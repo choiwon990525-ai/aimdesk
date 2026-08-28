@@ -513,6 +513,50 @@ function drawVerify(){
   $("#rdHalfW").style.color = col;
 }
 
+/* ══ 시야각 비교 ═══════════════════════════════════
+   섹션이 이미 말하는 세 값(발로란트 103° · CS2 4:3 90° · CS2 16:9 약 106°)을 그림으로만 옮긴다.
+   새 주장을 더하지 않는다. CS2 는 세로 FOV 고정이라 4:3 수평 90° 에서 세로 73.74° 가 나오고,
+   그 세로로 16:9 를 풀면 수평 106.26° — 사이트 표기 「약 106°」와 맞는다.
+   화면 폭은 셋 다 같다. 달라지는 건 모니터가 아니라 담기는 각도다.
+   표적 위치 = 반폭 × tan(표적각) ÷ tan(FOV/2)  (직선 투영)
+   사용자 입력에 안 따라 움직이므로 render() 루프가 아니라 초기화·중단점 변경 때만 그린다 */
+const FOV_T = 20;                                   /* 비교에 쓰는 표적 각도 */
+const FOVS = [["CS2 4:3", 90, "90°"], ["발로란트", 103, "103°"], ["CS2 16:9", 106.26, "약 106°"]];
+function drawFov(){
+  /* VH 는 내용 끝(주석 디센더)에서 역산했다 — 데스크탑 163 · 모바일 277 유닛.
+     이 도형은 정적이라 조건부로 나타나는 요소가 없어 여백을 그냥 걷어내도 된다 */
+  const VW = MOB?460:800, VH = MOB?292:176, F = MOB?1.7:1;
+  const fs = n => +(n*F).toFixed(1);
+  const sw = n => +(n*F).toFixed(2);
+  const L = MOB?30:60, R = VW - L, cx = (L+R)/2, hw = (R-L)/2;
+  const top = fs(30), rowH = fs(52);
+  const T = (x,y,t,fill,size,anchor,weight) =>
+    `<text x="${x}" y="${y}" fill="${fill}" font-family="IBM Plex Mono,monospace" font-size="${fs(size)}"${anchor?` text-anchor="${anchor}"`:""}${weight?` font-weight="${weight}"`:""}>${t}</text>`;
+  const p = [];
+  const tan = d => Math.tan(d*Math.PI/360);          /* tan(각/2) */
+
+  FOVS.forEach(([name, fov, lab], i) => {
+    const y = top + i*rowH;
+    const dx = hw * Math.tan(FOV_T*Math.PI/180) / tan(fov);
+    p.push(T(L, y-fs(11), `${name} · ${lab}`, C.chalk3, 9.5));
+    /* 화면 — 폭은 셋 다 같다 */
+    p.push(`<line x1="${L}" y1="${y}" x2="${R}" y2="${y}" stroke="${C.rule2}" stroke-width="${sw(1.5)}"/>`);
+    [L,R].forEach(x => p.push(`<line x1="${x}" y1="${y-fs(7)}" x2="${x}" y2="${y+fs(7)}" stroke="${C.rule2}" stroke-width="${sw(1.5)}"/>`));
+    /* 화면 중앙 — 크로스헤어 자리 */
+    p.push(`<line x1="${cx}" y1="${y-fs(4)}" x2="${cx}" y2="${y+fs(4)}" stroke="rgba(238,241,244,.22)" stroke-width="${sw(1)}"/>`);
+    /* 같은 각도의 표적 */
+    p.push(`<line x1="${cx+dx}" y1="${y-fs(9)}" x2="${cx+dx}" y2="${y+fs(9)}" stroke="${C.chalk}" stroke-width="${sw(2.4)}"/>`);
+    p.push(`<circle cx="${cx+dx}" cy="${y}" r="${fs(2.6)}" fill="${C.chalk}"/>`);
+    /* 중앙에서 표적까지가 얼마나 벌어졌는지 — 가는 연결선 */
+    p.push(`<line x1="${cx}" y1="${y}" x2="${cx+dx}" y2="${y}" stroke="${C.chalk}" stroke-width="${sw(2.4)}"/>`);
+  });
+  p.push(T(cx, top + 2*rowH + fs(26), `가운데 = 크로스헤어 · 흰 점 = ${FOV_T}° 표적`, C.chalk3, 9.5, "middle"));
+
+  const el = $("#fov");
+  el.setAttribute("viewBox", `0 0 ${VW} ${VH}`);
+  el.innerHTML = p.join("");
+}
+
 /* ══ 프로 ══════════════════════════════════════════ */
 function applyPro(i){
   const pr = PROS[i], g = $("#game").value, dpi = num($("#dpi")) || 800;
@@ -770,11 +814,13 @@ function render(){ read(); drawConvert(); drawScope(); drawBand(); drawBench(); 
   let rt;
   window.addEventListener("resize", () => {
     clearTimeout(rt);
-    rt = setTimeout(() => { const m = isMob(); if (m !== MOB){ MOB = m; render(); } else markScroll(); }, 160);
+    rt = setTimeout(() => { const m = isMob(); if (m !== MOB){ MOB = m; render(); drawFov(); } else markScroll(); }, 160);
   });
 
   /* 접힌 표는 폭이 0이라 못 잰다. 펼치는 순간 다시 잰다 */
   $$("details").forEach(d => d.addEventListener("toggle", markScroll));
+
+  drawFov();   /* 정적 도형 — 입력에 안 따라 움직이므로 render() 밖에서 한 번만 */
 
   render();
 })();
