@@ -2,8 +2,9 @@
 /* ─────────────────────────────────────────────────────────
    에임데스크 시각 검사기 — 좌표 추정 대신 실제 렌더를 잰다.
 
-     node tools/audit.js              1280 · 768 · 375 전부
+     node tools/audit.js              페이지 2개 × 폭 1280 · 768 · 375 전부
      node tools/audit.js 375          한 폭만
+     node tools/audit.js posture      한 페이지만 (파일명 일부로 고름)
      node tools/audit.js --shots      섹션 스크린샷도 저장
      node tools/audit.js --contrast   명도 대비를 접지 않고 전부 나열
 
@@ -23,8 +24,11 @@ const path = require("path");
 const fs = require("fs");
 
 const ROOT  = path.resolve(__dirname, "..");
-const PAGE  = "file:///" + path.join(ROOT, "index.html").split(path.sep).join("/");
 const SHOTS = path.join(__dirname, "shots");
+
+/* 정적 페이지 목록. 새 페이지를 만들면 여기에 추가한다 —
+   빠뜨리면 그 페이지는 아무도 안 본다 */
+const FILES = ["index.html", "posture.html"];
 
 const args   = process.argv.slice(2);
 const SHOT   = args.includes("--shots");
@@ -32,13 +36,24 @@ const FULLC  = args.includes("--contrast");
 const picked = args.filter(a => /^\d+$/.test(a)).map(Number);
 const WIDTHS = picked.length ? picked : [1280, 768, 375];
 
+/* 숫자도 --옵션도 아닌 인자는 페이지 이름 조각으로 본다 */
+const pick  = args.filter(a => !/^\d+$/.test(a) && !a.startsWith("--"));
+const PAGES = FILES
+  .filter(f => !pick.length || pick.some(q => f.includes(q)))
+  .map(f => ({
+    file: f,
+    slug: f.replace(/\.html$/, ""),
+    url:  "file:///" + path.join(ROOT, f).split(path.sep).join("/"),
+    here: fs.existsSync(path.join(ROOT, f))
+  }));
+
 const TAP_MIN  = 44;
 const CONTRAST = 4.5;
 
 /* ══ 페이지 안에서 도는 측정 코드 ══════════════════════ */
 function collect(opts) {
   const { TAP_MIN, CONTRAST } = opts;
-  const out = { overflow: [], contrast: [], tap: [], occluded: [], svg: [] };
+  const out = { overflow: [], contrast: [], tap: [], tapInline: [], occluded: [], svg: [] };
   const vw = window.innerWidth;
 
   const shown = el => el.checkVisibility
@@ -126,6 +141,12 @@ function collect(opts) {
      마우스 환경의 작은 컨트롤은 의도된 것이므로 크기만 참고로 남긴다 */
   out.coarse = matchMedia("(pointer:coarse)").matches;
   const owns = (hit, el) => !!hit && (hit === el || el.contains(hit));
+  /* WCAG 2.5.8 은 「문장 안에 흐르는 링크」를 44px 기준에서 뺀다.
+     글줄 한가운데 링크를 44px 로 키우면 줄 간격이 무너지고, 그건 이 사이트에서
+     본문 리듬을 깨는 짓이다. 대신 따로 세어 보여준다 — 조용히 넘기지는 않는다 */
+  const inlineText = el => el.tagName === "A" && getComputedStyle(el).display === "inline"
+    && !!el.parentElement
+    && (el.parentElement.textContent || "").trim() !== (el.textContent || "").trim();
   for (const el of document.querySelectorAll("button, a[href], select, input, summary, [role=button]")) {
     if (!shown(el)) continue;
     /* behavior:instant 가 필수 — html{scroll-behavior:smooth} 면 스크롤이 비동기라
@@ -145,19 +166,31 @@ function collect(opts) {
       }
     const hw = x1 >= x0 ? x1 - x0 + S : 0, hh = y1 >= y0 ? y1 - y0 + S : 0;
     if (hw < TAP_MIN || hh < TAP_MIN)
-      out.tap.push({ el: name(el), text: txt(el),
+      (inlineText(el) ? out.tapInline : out.tap).push({ el: name(el), text: txt(el),
         box: `${r.width.toFixed(0)}x${r.height.toFixed(0)}`, hit: `${hw.toFixed(0)}x${hh.toFixed(0)}` });
 
-    const CX = 24, CY = 6; let lost = 0; const thieves = {};
-    for (let i = 0; i < CX; i++) for (let j = 0; j < CY; j++) {
-      const x = r.left + r.width * (i + 0.5) / CX, y = r.top + r.height * (j + 0.5) / CY;
-      if (x < 0 || y < 0 || x > vw - 1 || y > vh - 1) continue;
-      const hit = document.elementFromPoint(x, y);
-      if (owns(hit, el)) continue;
-      lost++; const k = hit ? name(hit) : "(없음)"; thieves[k] = (thieves[k] || 0) + 1;
+    /* 줄바꿈된 인라인 링크는 getBoundingClientRect 가 두 줄을 통째로 감싼 상자라
+       가운데가 텅 비어 있다. 그 빈 곳을 「가림」으로 세면 안 된다 —
+       줄 조각(getClientRects)마다 따로 훑는다. 블록 요소면 조각이 하나라 결과가 같다 */
+    const CX = 24, CY = 6; let lost = 0, total = 0; const thieves = {};
+    for (const q of el.getClientRects()) {
+      if (q.width < 1 || q.height < 1) continue;
+      /* 테두리에서 1px 안쪽만 훑는다. 글줄 조각의 마지막 1px 미만은 elementFromPoint 가
+         바깥으로 반올림해서 「가림」으로 잡히는데 실제로 가린 건 없다 (실측 0.78px).
+         진짜 가림은 이 테두리보다 훨씬 넓게 덮으므로 이 여유로 놓치지 않는다 */
+      const ix = Math.min(1, q.width / 4), iy = Math.min(1, q.height / 4);
+      const L = q.left + ix, T = q.top + iy, W = q.width - ix * 2, H = q.height - iy * 2;
+      for (let i = 0; i < CX; i++) for (let j = 0; j < CY; j++) {
+        const x = L + W * (i + 0.5) / CX, y = T + H * (j + 0.5) / CY;
+        if (x < 0 || y < 0 || x > vw - 1 || y > vh - 1) continue;
+        total++;
+        const hit = document.elementFromPoint(x, y);
+        if (owns(hit, el)) continue;
+        lost++; const k = hit ? name(hit) : "(없음)"; thieves[k] = (thieves[k] || 0) + 1;
+      }
     }
-    if (lost) out.occluded.push({ el: name(el), text: txt(el), lost, total: CX * CY,
-      pct: +(lost / (CX * CY) * 100).toFixed(1),
+    if (lost) out.occluded.push({ el: name(el), text: txt(el), lost, total,
+      pct: +(lost / total * 100).toFixed(1),
       by: Object.entries(thieves).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k}×${v}`).join(", ") });
   }
 
@@ -277,7 +310,20 @@ const rule = c => P(c.repeat(74));
   const browser = await chromium.launch();
   let fails = 0;
 
-  for (const width of WIDTHS) {
+  /* 없는 파일은 조용히 건너뛰지 않는다 — 「조용한 실패」 함정 */
+  const gone = PAGES.filter(p => !p.here);
+  if (gone.length) {
+    fails += gone.length;
+    rule("═"); P("  ✘ 목록에 있는데 파일이 없는 페이지");
+    gone.forEach(p => P("      " + p.file));
+  }
+
+  /* 페이지 × 폭을 미리 펼쳐 둔다 */
+  const RUNS = [];
+  for (const pg of PAGES.filter(p => p.here))
+    for (const width of WIDTHS) RUNS.push({ pg, width });
+
+  for (const { pg, width } of RUNS) {
     /* 사이트의 모바일 분기(≤680px)는 터치 환경으로 본다 — 그래야 pointer:coarse 규칙이 걸린다 */
     const touch = width <= 680;
     const ctx  = await browser.newContext({ viewport: { width, height: 900 },
@@ -287,13 +333,15 @@ const rule = c => P(c.repeat(74));
     page.on("console", m => { if (m.type() === "error") errs.push("console: " + m.text()); });
     page.on("pageerror", e => errs.push("pageerror: " + e.message));
 
-    await page.goto(PAGE, { waitUntil: "load" });
+    await page.goto(pg.url, { waitUntil: "load" });
     await page.evaluate(() => document.fonts.ready);
     await page.waitForTimeout(250);
 
     const r = await page.evaluate(collect, { TAP_MIN, CONTRAST });
 
-    rule("═"); P(`  ${width}px   pointer: ${r.coarse ? "coarse (터치)" : "fine (마우스)"}`); rule("═");
+    rule("═");
+    P(`  ${pg.file}   ${width}px   pointer: ${r.coarse ? "coarse (터치)" : "fine (마우스)"}`);
+    rule("═");
 
     const sec = (title, list, fmt) => {
       if (!list.length) { P(`  ✔ ${title}`); return; }
@@ -325,8 +373,13 @@ const rule = c => P(c.repeat(74));
       P(`      (전체 나열은 --contrast)`);
     }
 
-    if (r.coarse)
+    if (r.coarse) {
       sec(`탭 타겟 ${TAP_MIN}px 미만`, r.tap, x => `${x.el} «${x.text}» 상자 ${x.box} → 실제 히트 ${x.hit}`);
+      /* WCAG 2.5.8 인라인 예외. 불합격은 아니지만 몇 개인지는 보이게 둔다 */
+      if (r.tapInline.length)
+        P(`  · 문장 안 링크 ${r.tapInline.length}건 — 인라인 예외라 안 셈 (${
+          r.tapInline.map(x => `«${x.text}» ${x.hit}`).join(" · ")})`);
+    }
     else if (!r.tap.length) P(`  ✔ 탭 타겟 ${TAP_MIN}px 이상 (pointer:fine 이라 기준 미적용)`);
     else P(`  · 탭 타겟 — pointer:fine 이라 불합격으로 세지 않음 (${r.tap.length}건: ${
       [...new Set(r.tap.map(x => x.hit))].join(" · ")})`);
@@ -340,7 +393,7 @@ const rule = c => P(c.repeat(74));
     if (SHOT) {
       const secs = await page.$$("header, section, footer");
       for (let i = 0; i < secs.length; i++)
-        await secs[i].screenshot({ path: path.join(SHOTS, `${width}-${String(i).padStart(2, "0")}.png`) }).catch(() => {});
+        await secs[i].screenshot({ path: path.join(SHOTS, `${pg.slug}-${width}-${String(i).padStart(2, "0")}.png`) }).catch(() => {});
       P(`  · 스크린샷 ${secs.length}장 → tools/shots/`);
     }
     await ctx.close();

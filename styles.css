@@ -90,6 +90,12 @@ h2{font-size:clamp(21px,3.4vw,27px);font-weight:600;letter-spacing:-.025em;margi
 .take{font-size:17px;font-weight:500;color:var(--chalk);max-width:52ch;margin:0 0 14px;line-height:1.6}
 .sub{font-size:14.5px;color:var(--chalk2);max-width:64ch;margin:0 0 26px}
 
+/* 링크에 색을 쓰지 않는다 — 파란 링크는 이 사이트에서 근거등급 신호를 깨뜨린다.
+   글자는 분필색 그대로 두고 밑줄로만 구분한다 */
+a{color:var(--chalk);text-decoration:underline;text-underline-offset:3px;
+  text-decoration-color:var(--rule2);text-decoration-thickness:1px}
+a:hover{text-decoration-color:var(--chalk2)}
+
 /* ── 변환 패널 ── */
 .conv{display:grid;grid-template-columns:1fr 54px 1fr;border:1px solid var(--rule2);background:var(--slab)}
 .side{padding:20px 22px 22px;min-width:0}
@@ -221,6 +227,24 @@ tr.me td:first-child{box-shadow:inset 2px 0 0 var(--chalk)}
 .note b{color:var(--chalk);font-weight:500}
 .note + .note{margin-top:1px}
 .cols2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+
+/* ── 자세 체크리스트 (posture.html) ──
+   체크 상자도 진행률도 없다. 상자를 달면 「몇 개 채웠나」가 생기고,
+   그건 결국 점수다 — 이 페이지가 안 하기로 한 그것이다. 번호만 매긴다 */
+.chk{list-style:none;counter-reset:c;margin:0;padding:0;
+  border:1px solid var(--rule);border-bottom:0}
+.chk li{counter-increment:c;background:var(--slab);
+  border-bottom:1px solid var(--rule);padding:19px 22px 21px 56px;position:relative}
+.chk li::before{content:counter(c);position:absolute;left:22px;top:19px;
+  font-family:var(--mono);font-size:14px;font-weight:500;color:var(--chalk3);
+  font-variant-numeric:tabular-nums}
+.chk .ct{font-size:16px;font-weight:600;color:var(--chalk);margin:0 0 9px;line-height:1.5}
+.chk .ct .tag{margin-left:5px}
+.chk li > p{font-size:14.5px;color:var(--chalk2);margin:0;max-width:62ch}
+.chk .premise{margin-top:11px;max-width:66ch}
+/* 헤더의 워드마크가 여기서는 돌아가는 링크다. 밑줄은 빼고 hover 로만 알린다 */
+a.brand{color:inherit;text-decoration:none}
+a.brand:hover .mark{color:var(--chalk2)}
 code{font-family:var(--mono);font-size:13px;color:var(--chalk)}
 
 /* ── 프로 카드 ── */
@@ -289,6 +313,9 @@ footer b{color:var(--chalk2);font-weight:500}
   .band{margin-left:0}
   .cols2{grid-template-columns:1fr}
   .legend{display:none}
+  /* 번호 자리를 좁혀 본문 폭을 되돌려 준다 — 375px 에서 253 → 271px */
+  .chk li{padding:17px 16px 19px 41px}
+  .chk li::before{left:15px;top:17px}
 }
 /* 44px 는 손가락 기준이지 마우스 기준이 아니다. pointer:fine 에서 폼을 키우면
    제도판 비례가 무너지므로 터치 환경에서만 넓힌다.
@@ -298,5 +325,6 @@ footer b{color:var(--chalk2);font-weight:500}
   .f input,.f select{min-height:44px}
   .seg button,.pcard button{min-height:44px}
   details.adv > summary{padding-top:15px;padding-bottom:15px}
+  a.brand{min-height:44px}   /* posture.html 의 돌아가기 링크. 56px 막대 안이라 보이는 건 그대로다 */
 }
 @media(prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}

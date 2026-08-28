@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>에임데스크 — 자세 체크리스트</title>
+<meta name="description" content="점수를 내지 않는 자세 체크리스트. 수면·워밍업, 키보드 회전과 기울기, 어깨 부하, 전완 지지의 한계 — 근거가 확인된 다섯 항목만.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<!-- ⚠ 아래 <link rel=icon> 과 <header> 는 index.html 의 사본입니다.
+     빌드 도구가 없어 복제가 불가피합니다. 한쪽만 고치면 두 페이지가 갈립니다 —
+     CLAUDE.md 「사본이 둘」 참조. 고칠 때는 반드시 양쪽 다. -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2016%2016'%3E%3Cstyle%3E:root{color:%230A0C0F}@media(prefers-color-scheme:dark){:root{color:%23EEF1F4}}%3C/style%3E%3Cg%20fill='none'%20stroke='currentColor'%20stroke-width='1.15'%3E%3Cpath%20d='M5.2%200.6V15.4'/%3E%3Cpath%20d='M0.6%205.2H15.4'/%3E%3C/g%3E%3Crect%20x='7.2'%20y='7.2'%20width='7.4'%20height='7.4'%20fill='currentColor'/%3E%3C/svg%3E">
+</head>
+<body>
+
+<header>
+  <div class="wrap hbar">
+    <!-- index.html 과 달리 여기서는 워드마크가 돌아가는 링크입니다 -->
+    <a class="brand" href="index.html">
+      <svg class="mk" width="20" height="20" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+        <g fill="none" stroke="currentColor" stroke-width="1.15">
+          <path d="M5.2 0.6V15.4"/><path d="M0.6 5.2H15.4"/>
+        </g>
+        <rect x="7.2" y="7.2" width="7.4" height="7.4" fill="currentColor"/>
+      </svg>
+      <div class="mark lat lat-lg">AIMDESK<i> / 감도 변환기로</i></div>
+    </a>
+    <div class="legend">
+      <span><b class="lg-ok"></b>검증</span>
+      <span><b class="lg-mid"></b>추론</span>
+      <span><b class="lg-bad"></b>미지원</span>
+    </div>
+  </div>
+</header>
+
+<!-- ═══ 1. 선언 ═══ -->
+<!-- 이 페이지가 따로 있는 이유가 이 섹션입니다. 변환기 페이지에 섹션으로 붙이면
+     「자세 점수는 뺐습니다」와 나란히 놓여 모순처럼 읽힙니다.
+     점수·총점·집계식을 다시 넣지 마세요 — 그게 이 페이지의 존재 이유입니다. -->
+<section id="top">
+  <div class="wrap">
+    <p class="eyebrow">자세</p>
+    <!-- 흐린 쪽이 「무엇을」, 밝은 쪽이 「어떻게 한다」 — index.html 의 h1 과 같은 짜임입니다 -->
+    <h1><em>점수를</em> 내지 않습니다</h1>
+    <p class="lead">자세를 숫자로 매기면 그 숫자를 믿게 됩니다.
+      <b>근거가 확인된 다섯 가지</b>만 체크리스트로 두고, 합산도 등급도 하지 않습니다.</p>
+
+    <div class="note" style="margin-top:28px">
+      <b>여기 있는 것</b> — 문헌에서 방향이 확인된 항목뿐입니다. 항목마다 근거 등급과 출처를 답니다.<br>
+      <b>여기 없는 것</b> — 8축 점수, 안정성·지속성 총점, 집계식, cm 단위 높이 지시,
+      회전 각도의 크기. <a href="index.html#left-out">왜 뺐는지</a>는 변환기 페이지에 있습니다.<br>
+      <b>범위</b> — 이 페이지는 의료·건강 조언이 아닙니다. 아픈 곳이 있으면 의료인을 찾으세요.
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 2. 체크리스트 ═══ -->
+<section class="s-tool">
+  <div class="wrap">
+    <p class="eyebrow">체크리스트</p>
+    <h2>다섯 가지</h2>
+    <p class="take">순서는 근거가 센 것부터입니다. 맨 위 항목이 이 사이트의 책상 치수 권고보다 근거가 셉니다.</p>
+    <p class="sub">체크 상자는 없습니다. 눌러서 채우는 진행률도 없습니다 —
+      다섯 개를 다 지킨 상태를 점수로 만들면 결국 <b>점수를 내는 것</b>이기 때문입니다.</p>
+
+    <ol class="chk">
+
+      <li>
+        <p class="ct">자고, 시작 전에 손을 푼다 <span class="tag t-ok">검증</span></p>
+        <p>선수 60명을 조사했더니 <b>수면</b>과 <b>워밍업을 안 하는 것</b>이 통증과
+          유의하게 연관됐습니다. 이 페이지에서 근거가 가장 센 항목이고,
+          이 사이트 전체의 책상 치수 권고보다도 셉니다.</p>
+        <p class="premise">출처 — 선수 60명 설문. 수면 <code>p=0.012</code> · 워밍업 부재 <code>p=0.010</code>.
+          <b>연관이지 인과가 아닙니다.</b> 잠을 자면 통증이 낫는다는 뜻이 아니라,
+          통증이 있는 쪽에 이 두 가지가 몰려 있었다는 뜻입니다.
+          그리고 이건 <b>통증</b>에 대한 결과지 조준 실력에 대한 결과가 아닙니다.</p>
+      </li>
+
+      <li>
+        <p class="ct">키보드의 오른쪽 끝을 몸쪽으로 당긴다 <span class="tag t-ok">검증</span></p>
+        <p>위에서 봤을 때 키보드를 <b>똑바로</b> 두지 말고,
+          <b>오른쪽 끝을 몸쪽으로 당겨</b> 비스듬히 놓습니다.
+          WASD 를 짚는 왼손이 몸 바깥으로 벌어져 있으면 손목이 새끼손가락 쪽으로 꺾입니다.
+          키보드를 돌리면 그만큼 손목이 펴집니다.</p>
+        <p class="premise">출처 — 인체공학 키보드 설계 규격. 왼손 구역은
+          <code>F</code> 키가 <code>A</code> 키보다 사용자에게 가깝도록 각을 줍니다.
+          <b>각도의 크기는 여기 없습니다</b> — 문헌의 15~25° 는 양손 타이핑에서 나온 값이라
+          한손 FPS 자세에 그대로 못 씁니다.
+          <a href="index.html#left-out">「일부러 안 넣은 것」</a>에 남겨 뒀습니다.</p>
+        <p class="premise">돌리는 방향을 부호나 시곗바늘에 빗대지 않고 <b>어느 끝이 어디로 가는지</b>로
+          적었습니다. 기준을 어디에 두느냐에 따라 같은 말이 정반대로 읽혀서,
+          이 항목은 실제로 한 번 뒤집힌 적이 있습니다.</p>
+      </li>
+
+      <li>
+        <p class="ct">키보드 뒷다리를 세우지 않는다 <span class="tag t-ok">검증</span></p>
+        <p>대부분의 키보드에 달린 <b>뒷다리(스탠드)를 접어 두세요.</b>
+          뒷다리를 세우면 뒤쪽이 높아지고, 그만큼 손목이 위로 젖혀집니다.
+          평평하게 두거나 앞쪽이 아주 살짝 높은 정도까지가 범위입니다.</p>
+        <p class="premise">출처 — 메타분석. 뒤쪽이 높은 기울기는 손목 신전을 크게 늘리고,
+          앞쪽이 높은 기울기는 줄입니다. 권장 범위 <code>0°~−4°</code> —
+          여기서 <code>(−)</code> 는 <b>앞쪽이 뒤쪽보다 높다</b>는 뜻입니다.
+          <b>더 눕힐수록 좋은 게 아닙니다.</b> −4° 를 넘겨 기울이는 근거는 없습니다.</p>
+      </li>
+
+      <li>
+        <p class="ct">키보드를 낮춘다 <span class="tag t-ok">검증</span></p>
+        <p>키보드가 높으면 어깨를 들어 올린 채로 손을 얹게 됩니다.
+          <b>키보드 높이를 낮추면 어깨 거상과 손목의 척측편위가 함께 줍니다</b> —
+          둘이 같이 움직입니다.</p>
+        <p class="premise">출처 — 키보드 높이 조작 실험. <b>몇 cm 로 두라는 지시는 여기 없습니다</b> —
+          앉은 눈높이 원자료를 확보하기 전에는 cm 숫자를 못 냅니다.
+          방향(낮추면 준다)만 확인된 상태입니다.</p>
+      </li>
+
+      <li>
+        <p class="ct">팔걸이에 기대되, 그걸로 됐다고 여기지 않는다 <span class="tag t-ok">검증</span></p>
+        <p>전완을 받치면 목·어깨 <b>근활성은 실제로 줍니다.</b>
+          다만 그렇게 해서 <b>질환 발생률까지 줄었다는 근거는 없습니다.</b>
+          「받치지 마라」가 아니라 <b>「받쳤으니 안전하다고 생각하지 마라」</b>입니다.</p>
+        <p class="premise">출처 — 문헌고찰. 근활성 감소는 반복 확인됐고,
+          발생률 감소는 확인되지 않았습니다. 두 결과의 차이를 뭉개면
+          이 항목은 「팔걸이를 사면 해결된다」로 잘못 읽힙니다.</p>
+      </li>
+
+    </ol>
+  </div>
+</section>
+
+<!-- ═══ 3. 닫는 글 ═══ -->
+<section class="s-note">
+  <div class="wrap">
+    <p class="eyebrow">로드맵</p>
+    <h2>이 페이지가 안 하는 것</h2>
+    <p class="sub">자세 기능은 한 번 통째로 빠졌다가 <b>일부만</b> 돌아왔습니다.
+      남은 것들은 근거가 채워지는 순서대로 돌아옵니다.</p>
+    <div class="note">
+      <b>점수·총점·집계식</b> — 축 8개 중 셋이 문헌에 없고 합산식도 근거가 없습니다. 안 돌아옵니다.<br>
+      <b>회전 각도의 크기</b> — 방향만 돌아왔습니다. 15~25° 는 한손 FPS 자세에서 실측이 필요합니다.<br>
+      <b>cm 단위 높이</b> — 방향만 돌아왔습니다. Size Korea 원자료가 있어야 숫자를 냅니다.
+    </div>
+    <p class="premise"><a href="index.html#left-out">변환기 페이지의 「일부러 안 넣은 것」</a>에
+      전체 목록과 각각의 복귀 조건이 있습니다.</p>
+  </div>
+</section>
+
+<footer><div class="wrap">
+  <b>등급</b> — <span class="tag t-ok">검증</span> 은 출처에서 <b>방향</b>이 확인됐다는 뜻입니다.
+  크기·수치까지 확인됐다는 뜻이 아닙니다.<br>
+  <b>확인</b> — 2026-08-29. 틀린 값을 발견하시면 알려주세요.<br>
+  <b>범위</b> — 의료·건강 조언이 아닙니다. 통증이 있으면 이 페이지가 아니라 의료인을 찾으세요.
+</div></footer>
+
+</body>
+</html>

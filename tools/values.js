@@ -3,7 +3,10 @@
    시각 검사(audit.js)와 달리 계산 결과가 안 흔들렸는지를 본다.   node tools/values.js */
 const { chromium } = require("playwright");
 const path = require("path");
-const PAGE = "file:///" + path.join(__dirname, "..", "index.html").split(path.sep).join("/");
+/* 검사 내용이 페이지마다 달라서 audit.js 처럼 한 벌을 순회시키지 않는다.
+   1~12 는 index.html, 13 은 posture.html */
+const url  = f => "file:///" + path.join(__dirname, "..", f).split(path.sep).join("/");
+const PAGE = url("index.html");
 
 let bad = 0;
 const eq = (label, got, want) => {
@@ -208,6 +211,77 @@ const eq = (label, got, want) => {
     await new Promise(r=>setTimeout(r,60));
     return /패드 끝/.test(document.querySelector('#verify').textContent);
   }), false);
+
+
+  console.log("13 「일부러 안 넣은 것」 표 — 자세 항목 일부 복귀");
+  await p.goto(PAGE); await p.evaluate(() => document.fonts.ready);
+  const lo = await p.evaluate(() => {
+    const s = document.querySelector("#left-out");
+    return { keys: [...s.querySelectorAll("tbody tr")].map(r => r.children[0].textContent.trim()),
+             rows: s.querySelectorAll("tbody tr").length,
+             link: !!s.querySelector('a[href="posture.html"]'),
+             cols: s.querySelectorAll("thead th").length };
+  });
+  eq("표 3열 유지 (열 늘리지 않음)", lo.cols, 3);
+  eq("뺀 기능 6줄 유지", lo.rows, 6);
+  eq("기능 칸 이름 — 자세 점수", lo.keys.includes("자세 점수 · 집계식"), true);
+  eq("기능 칸 이름 — 키보드 각도", lo.keys.includes("키보드 각도 — 크기"), true);
+  eq("기능 칸 이름 — 높이", lo.keys.includes("높이 — cm 단위 지시"), true);
+  eq("자세 페이지 링크", lo.link, true);
+
+  console.log("14 자세 페이지 (posture.html)");
+  await p.goto(url("posture.html")); await p.evaluate(() => document.fonts.ready);
+  const po = await p.evaluate(() => {
+    const li = [...document.querySelectorAll(".chk > li")];
+    const probe = document.createElement("span");
+    probe.style.color = "var(--chalk)"; document.body.appendChild(probe);
+    const chalk = getComputedStyle(probe).color; probe.remove();
+    return { n: li.length,
+             tagged: li.filter(l => l.querySelector(".ct .tag")).length,
+             body: document.body.textContent.replace(/\s+/g, " "),
+             /* 지시문(제목 + 본문)과 각주(.premise)를 나눠 본다. 각주에서 「이 숫자는 안 씁니다」라고
+                밝히는 것과, 지시문에서 그 숫자를 시키는 것은 정반대다 */
+             instr: li.map(l => [...l.querySelectorAll("p:not(.premise)")]
+                      .map(e => e.textContent).join(" ")).join(" ").replace(/\s+/g, " "),
+             script: document.querySelectorAll("script").length,
+             /* 점수를 낼 수 있는 입력 장치가 하나도 없어야 한다 */
+             widgets: document.querySelectorAll("input,progress,meter,output,select").length,
+             back: !!document.querySelector('a.brand[href="index.html"]'),
+             /* 링크 색이 분필색이어야 한다 — 파란 기본 링크면 근거등급 신호가 깨진다 */
+             linkOK: [...document.querySelectorAll("section a")]
+               .every(a => getComputedStyle(a).color === chalk) };
+  });
+  eq("체크리스트 5줄", po.n, 5);
+  eq("5줄 전부 근거 태그", po.tagged, 5);
+  eq("점수용 입력 요소 0개", po.widgets, 0);
+  eq("「점수를 내지 않습니다」 선언", /점수를 내지 않습니다/.test(po.body), true);
+  /* 「총점」이라는 낱말 자체는 「총점을 안 냅니다」라고 밝히려면 필요하다.
+     막아야 하는 건 낱말이 아니라 실제로 매겨진 숫자다 */
+  eq("매겨진 점수 없음", /\d+\s*점(?!수)|\/\s*100\b/.test(po.body), false);
+  /* 스크립트가 없으면 점수를 계산할 방법 자체가 없다 — 가장 센 보장이다 */
+  eq("스크립트 0개 (계산 수단 없음)", po.script, 0);
+  eq("헤더에 index 로 돌아가는 링크", po.back, true);
+  eq("링크에 색 안 씀 (분필색)", po.linkOK, true);
+  /* 2026-08-28 확정. research/04 의 「반시계 · 오른쪽 끝을 앞으로」는 폐기됐다.
+     방향 부호가 뒤집히면 정반대 지시가 되므로 서술 표현만 남긴다 —
+     CLAUDE.md 「research/ 안의 폐기된 주장」 */
+  eq("회전 방향 확정 표현", /오른쪽 끝을 몸쪽으로/.test(po.body), true);
+  eq("폐기된 회전 표현 없음", /반시계|시계 방향|오른쪽 끝을 앞으로/.test(po.body), false);
+  /* 지시문에는 각도도 cm 도 없어야 한다. 각주에서 「이 숫자는 근거가 모자라 안 씁니다」라고
+     밝히는 건 오히려 지켜야 할 것이므로 .premise 는 제외하고 본다 */
+  eq("지시문에 각도 수치 없음", /\d+\s*°|\d+~\d+/.test(po.instr), false);
+  eq("지시문에 cm 수치 없음", /\d+\s*cm/.test(po.instr), false);
+
+  console.log("15 두 페이지가 공유하는 사본");
+  /* 빌드 도구가 없어 헤더 마크와 파비콘이 복제돼 있다. 한쪽만 고치면 여기서 갈린다 */
+  const fs2 = require("fs");
+  const grab = (f, re) => (fs2.readFileSync(path.join(__dirname, "..", f), "utf8").match(re) || [""])[0];
+  for (const [what, re] of [["마크 SVG", /<svg class="mk"[\s\S]*?<\/svg>/],
+                            ["범례",     /<div class="legend">[\s\S]*?<\/div>\s*<\/div>/],
+                            ["파비콘",   /<link rel="icon"[^>]*>/]]) {
+    const a = grab("index.html", re), b = grab("posture.html", re);
+    eq(`${what} 두 페이지 동일`, a && a === b ? "같음" : "갈림", "같음");
+  }
 
   eq("페이지 예외 0", errs.length, 0);
   await b.close();
