@@ -1,0 +1,302 @@
+/* ─────────────────────────────────────────────
+   AIMDESK — 제도판(drafting table)
+   규칙: 색은 오직 "확신의 정도"에만 쓴다.
+   UI는 잉크와 분필. 초록/노랑/빨강은 근거등급·판정 전용.
+   ───────────────────────────────────────────── */
+:root{
+  --ink:#0A0C0F; --slab:#12161B; --slab2:#171C23;
+  --rule:#232A33; --rule2:#39434F;
+  /* chalk3 는 #6B7683 이었으나 5개 배경 전부에서 WCAG AA 미달이었다 (3.70~4.24:1).
+     #7B8794 로 올려 전부 4.5:1 을 넘긴다 — tools/audit.js 실측 */
+  --chalk:#EEF1F4; --chalk2:#96A1AE; --chalk3:#7B8794;
+  --ok:#43C59E; --mid:#E5A93C; --bad:#E2603F;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --sans:"IBM Plex Sans KR","IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  --hdr:56px; /* 스티키 헤더 높이 — .hbar와 scroll-padding-top이 같이 쓴다 */
+}
+*{box-sizing:border-box}
+
+/* ── 라틴 전용 라벨 ──────────────────────────────
+   IBM Plex Mono에는 한글이 없다. 한글에 모노를 걸면 대체 글꼴로 떨어지는데
+   자간만 그대로 남아 음절이 흩어진다 — 「바 꿀 곳」 「책 상 평 면 도」.
+   그래서 기본은 한글 기준(sans · 자간 0)이고, 라틴·숫자 전용 라벨에만 이걸 붙인다.
+   한글이 한 글자라도 섞이면 붙이지 않는다. */
+.lat{font-family:var(--mono);letter-spacing:var(--lat-track,.12em);text-transform:uppercase}
+.lat-lg{--lat-track:.16em}
+.lat-sm{--lat-track:.08em}
+.lat-mix{text-transform:none}   /* 고유명사 — Vitality · Spirit 처럼 대소문자를 살린다 */
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%;
+  scroll-padding-top:calc(var(--hdr) + 20px)}
+body{
+  margin:0;background:var(--ink);color:var(--chalk);
+  font-family:var(--sans);font-weight:300;font-size:15px;line-height:1.75;
+  -webkit-font-smoothing:antialiased;
+  /* 한글은 어절 단위로만 끊는다. 긴 영문·URL은 예외로 강제 줄바꿈 */
+  word-break:keep-all;overflow-wrap:break-word;
+  background-image:
+    linear-gradient(rgba(255,255,255,.012) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(255,255,255,.012) 1px,transparent 1px);
+  background-size:30px 30px;
+}
+.wrap{max-width:940px;margin:0 auto;padding:0 22px}
+.narrow{max-width:660px}
+
+/* ── 헤더 ── */
+header{position:sticky;top:0;z-index:60;background:rgba(10,12,15,.92);
+  backdrop-filter:blur(12px);border-bottom:1px solid var(--rule)}
+.hbar{display:flex;align-items:center;justify-content:space-between;gap:16px;height:var(--hdr)}
+/* 워드마크 AIMDESK는 라틴이라 .lat(모노+자간)을 붙인다. 병기된 한글만 되돌린다 */
+/* 마크 + 워드마크를 한 덩어리로 묶는다. .hbar 가 space-between 이라
+   묶지 않으면 마크·워드마크·범례가 세 덩어리로 흩어진다 */
+.brand{display:flex;align-items:center;gap:9px}
+.brand .mk{flex:none}          /* currentColor 라 글자 색을 따라간다 */
+.mark{font-weight:600;font-size:13.5px}
+.mark i{font-style:normal;color:var(--chalk3);font-weight:400;
+  font-family:var(--sans);letter-spacing:0;text-transform:none}
+.legend{display:flex;gap:15px;font-size:10.5px;font-weight:500;color:var(--chalk3)}
+.legend span{display:flex;align-items:center;gap:6px}
+.legend b{width:7px;height:7px;border-radius:1px;display:block}
+.lg-ok{background:var(--ok)}.lg-mid{background:var(--mid)}.lg-bad{background:var(--bad)}
+
+/* ── 섹션 리듬 ──
+   기준은 「그 섹션이 독자에게 요구하는 행위」다.
+     1군 조작 (.s-tool)  변환기 · 책상 · 프로 — 입력을 넣고 결과를 본다. 페이지의 목적지
+     2군 판단 (기본)     전체게임 · 최적구간 · 반올림 · 검산 · 조준 · 상수 — 표를 읽고 평가한다
+     3군 읽기 (.s-note)  FOV · 안 넣은 것
+   위 여백만 조절한다 — section+section 의 테두리가 「새 장이 시작된다」는 신호를
+   담당하므로 위쪽이 위계를 나르고, 아래는 균일해야 리듬이 안정적이다.
+   #hero 는 1군이지만 앞에 섹션이 없어 전환 신호가 필요 없다. 페이지 시작 여백 그대로 둔다 */
+section{padding:64px 0}
+section.s-tool{padding-top:96px}
+section.s-note{padding-top:44px}
+section + section{border-top:1px solid var(--rule)}
+#hero{padding:64px 0 56px}
+/* 자간 .18em이 빠진 만큼 굵기로 받는다 (uppercase는 영문 부분에만 걸린다) */
+.eyebrow{font-size:11px;font-weight:600;text-transform:uppercase;
+  color:var(--chalk3);margin:0 0 16px}
+/* "감도가 아니라 / 거리를 옮깁니다" 에서 끊기는 폭.
+   ch 는 숫자 0 의 폭이라 한글과 무관하다 — 실측하니 한글 자간은 0.91em 이고
+   letter-spacing -.04em 을 빼면 글자당 0.87em 이다. 그래서 em 으로 잡는다.
+     긴 줄 "거리를 옮깁니다" = 7×0.87 + 공백 0.22 = 6.3em
+     한 줄 전체              = 13×0.87 + 공백 0.44 = 11.8em
+   6.4~11.7em 사이면 두 줄로 끊긴다. 가운데인 8em. */
+h1{font-size:clamp(32px,6vw,54px);font-weight:600;line-height:1.1;letter-spacing:-.04em;
+  margin:0 0 18px;max-width:8em}
+h1 em{font-style:normal;color:var(--chalk3)}
+h2{font-size:clamp(21px,3.4vw,27px);font-weight:600;letter-spacing:-.025em;margin:0 0 12px;line-height:1.3}
+.lead{font-size:16px;color:var(--chalk2);max-width:60ch;margin:0}
+.lead b,.sub b{color:var(--chalk);font-weight:500}
+/* 섹션 첫 줄 — 여기서 무엇을 얻는지. 배경 설명(.sub)보다 앞에, 더 밝게 둔다 */
+.take{font-size:17px;font-weight:500;color:var(--chalk);max-width:52ch;margin:0 0 14px;line-height:1.6}
+.sub{font-size:14.5px;color:var(--chalk2);max-width:64ch;margin:0 0 26px}
+
+/* ── 변환 패널 ── */
+.conv{display:grid;grid-template-columns:1fr 54px 1fr;border:1px solid var(--rule2);background:var(--slab)}
+.side{padding:20px 22px 22px;min-width:0}
+.side .lab{font-size:10.5px;font-weight:600;text-transform:uppercase;
+  color:var(--chalk3);margin-bottom:16px}
+.side.to .lab{color:var(--chalk)}
+.f{margin-bottom:15px;position:relative}
+.f:last-child{margin-bottom:0}
+.f label{display:block;font-size:12px;color:var(--chalk3);margin-bottom:7px}
+.f input,.f select{width:100%;background:transparent;border:0;border-bottom:1px solid var(--rule2);
+  color:var(--chalk);font-family:var(--mono);font-size:19px;font-weight:500;
+  padding:2px 0 7px;outline:none;border-radius:0;font-variant-numeric:tabular-nums}
+.f select{font-family:var(--sans);font-size:16px;font-weight:400}
+.f input:focus,.f select:focus{border-bottom-color:var(--chalk)}
+.f option{background:var(--slab)}
+/* 이 패널의 결론. 왼쪽 입력과 같은 19px면 무엇이 답인지 안 보인다.
+   line-height를 안 잡으면 body의 1.75를 물려받아 숫자가 80px 상자에 뜬다 */
+#toSens{font-size:46px;line-height:1.1}
+.hint{font-size:11.5px;color:var(--chalk3);margin-top:7px;line-height:1.6}
+.swap{display:grid;place-items:center;border-left:1px solid var(--rule2);border-right:1px solid var(--rule2);background:#0F1419}
+.swap button{background:none;border:1px solid var(--rule2);color:var(--chalk3);width:32px;height:32px;
+  position:relative;font-size:15px;cursor:pointer;line-height:1;padding:0;transition:background .14s,color .14s}
+.swap button:hover{color:var(--ink);background:var(--chalk);border-color:var(--chalk)}
+/* 「감도」 라벨 줄에 붙인다. .f.out 바닥 기준으로 잡으면 입력이 커질 때
+   힌트 문구 옆으로 내려앉는다 — 입력 높이와 무관해야 한다.
+   top:0 이면 라벨(12px)보다 버튼(10.5px) 베이스라인이 4.7px 위에 뜬다 — 브라우저 실측값 */
+.f.out .copy{position:absolute;right:0;top:4.7px;background:none;border:0;color:var(--chalk3);
+  cursor:pointer;font-size:10.5px;font-weight:500;padding:3px 2px}
+.f.out .copy:hover{color:var(--chalk)}
+/* 탭 타겟. 보이는 크기(복사 27×21 · ⇄ 32×32)는 그대로 두고 누르는 영역만 넓힌다.
+   투명한 의사요소라 버튼 안쪽이므로 클릭은 버튼이 받는다 */
+.swap button::after{content:"";position:absolute;top:50%;left:50%;
+  width:44px;height:44px;transform:translate(-50%,-50%)}
+/* 복사 버튼은 바로 아래가 입력칸이라 상하 대칭으로 넓히면 우상단을 먹는다.
+   위(이전 칸 여백 15px)와 오른쪽(.side 패딩 22px)으로만 뻗는다.
+   위는 게임 select, 아래는 감도 input이 막아 세로로 쓸 수 있는 빈 띠가 43px뿐이다 —
+   44는 1px 모자라므로 42로 잡고 위아래 0.5px씩 띄워 침범을 0으로 만든다 */
+.f.out .copy::after{content:"";position:absolute;top:-19.2px;right:-8px;width:44px;height:42px}
+
+details.adv{border:1px solid var(--rule2);border-top:0;background:var(--slab)}
+details.adv > summary{list-style:none;cursor:pointer;padding:12px 22px;
+  font-size:11px;font-weight:500;color:var(--chalk3);user-select:none}
+details.adv > summary::-webkit-details-marker{display:none}
+details.adv > summary:hover{color:var(--chalk2)}
+details.adv[open] > summary{border-bottom:1px solid var(--rule)}
+.advgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;background:var(--rule)}
+.advgrid .f{background:var(--slab);margin:0;padding:14px 18px 16px}
+/* 스코프 패널 — 변환 패널 폭 안에 들어가야 해서 표 최소폭을 따로 잡는다 */
+#scopeBody{padding:15px 22px 17px}
+#scopeBody .scroll{border:0}
+#scopeBody table{min-width:400px;font-size:13.5px}
+#scopeBody th,#scopeBody td{padding:9px 12px}
+#scopeBody .premise{margin-top:12px}
+
+/* 크기가 달라도 세 숫자가 한 선에 앉게 한다.
+   그냥 baseline은 .m의 첫 줄 박스(=라벨) 기준이라 라벨이 맞춰진다. 숫자는 마지막 줄이므로
+   last baseline 이어야 한다. 미지원 브라우저는 이 선언을 버리고 flex-end로 남는다 */
+.readout{border:1px solid var(--rule2);border-top:0;background:#0F1419;padding:16px 22px;
+  display:flex;gap:26px;flex-wrap:wrap;align-items:flex-end;align-items:last baseline}
+/* 기본은 한글 기준. CM/360 · EDPI 라벨은 index.html에서 .lat 을 붙여 모노로 돌린다 */
+.readout .m{font-size:10px;font-weight:500;color:var(--chalk3)}
+.readout .m b{display:block;font-family:var(--mono);font-size:16px;color:var(--chalk);font-weight:500;
+  letter-spacing:-.025em;line-height:1.2;margin-top:3px;text-transform:none;font-variant-numeric:tabular-nums}
+/* 최적 구간 20~80의 판정 대상. 반 바퀴·eDPI와 동등하면 안 된다 */
+#resCm{font-size:32px}
+.band{font-size:11px;font-weight:500;padding:4px 10px;border:1px solid;margin-left:auto;
+  align-self:center}
+.premise{font-size:11px;color:var(--chalk3);margin:14px 0 0;line-height:1.7}
+
+/* ── 도면 ── */
+figure{margin:0;border:1px solid var(--rule);background:#0D1116}
+figure svg{display:block;width:100%;height:auto}
+.fighead{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:baseline;justify-content:space-between;
+  padding:13px 18px;border-bottom:1px solid var(--rule);font-size:10.5px;
+  font-weight:500;text-transform:uppercase;color:var(--chalk3)}
+.fighead .rd{display:flex;gap:20px;text-transform:none}
+.fighead .rd u{text-decoration:none}
+/* 수치라 모노로 되돌린다 */
+.fighead .rd s{text-decoration:none;color:var(--chalk);font-weight:600;font-size:13px;
+  font-family:var(--mono);font-variant-numeric:tabular-nums}
+/* 칸이 5개다. auto-fit 이 2~4열을 잡으면 나머지 빈 칸에 gap 배경(--rule)이
+   회색 블록으로 드러난다. 나머지가 0인 열 수는 1과 5뿐이라 5열이 안 들어가면 1열로 간다.
+   5열은 5×140+4gap = 704px, 좌우 여백 44px 을 더해 뷰포트 748px 이 경계다 */
+.figfoot{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1px;background:var(--rule);border-top:1px solid var(--rule)}
+@media(max-width:760px){.figfoot{grid-template-columns:1fr}}
+.figfoot .f{background:var(--slab);margin:0;padding:13px 16px 15px}
+.figfoot .f input,.figfoot .f select{font-size:16px}
+
+/* ── 표 ── */
+/* 표가 좁은 화면에서 가로로 넘치는데 스크롤 막대가 유휴 상태에 숨어 신호가 없었다.
+   트랙을 칠해 막대를 상시 노출하고 scrollbar-gutter 로 자리를 고정한다 —
+   막대가 도면의 슬라이드 레일처럼 프레임의 일부가 된다.
+   잉크·분필 색만 쓰므로 근거 등급 색 체계와 섞이지 않는다. 페이드는 사실상 색이라 안 쓴다 */
+.scroll{overflow-x:auto;border:1px solid var(--rule);scrollbar-gutter:stable;
+  scrollbar-width:thin;scrollbar-color:var(--rule2) var(--rule)}
+.scroll::-webkit-scrollbar{height:10px}
+.scroll::-webkit-scrollbar-track{background:var(--rule)}
+.scroll::-webkit-scrollbar-thumb{background:var(--rule2)}
+.scroll::-webkit-scrollbar-thumb:hover{background:var(--chalk3)}
+/* 위 스크롤바 스타일은 고전 스크롤바를 쓰는 데스크탑에서만 보인다. 그런데 데스크탑에서는
+   표가 안 넘친다 — 넘치는 건 모바일이고 거기선 오버레이 스크롤바가 유휴 시 숨는다.
+   즉 스크롤바는 정작 필요한 곳에서 안 보인다. 그래서 넘칠 때만 레일을 직접 그린다.
+   손잡이 폭이 보이는 비율, 위치가 현재 스크롤 위치다. 잉크·분필 색만 쓴다 */
+.rail{height:3px;background:var(--rule);position:relative;margin-top:-1px}
+.rail i{position:absolute;top:0;bottom:0;background:var(--rule2);display:block}
+table{width:100%;border-collapse:collapse;font-size:14px;min-width:560px}
+th,td{text-align:left;padding:12px 14px;border-bottom:1px solid var(--rule);vertical-align:top}
+tbody tr:last-child td{border-bottom:0}
+/* 헤더 행은 한 줄로 읽히는 띠다. 셀마다 언어가 섞여도 폰트는 통일한다 */
+th{font-size:10.5px;font-weight:500;text-transform:uppercase;
+  color:var(--chalk3);background:var(--slab2)}
+td.num{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:500;white-space:nowrap}
+/* 표 칸 안의 부연 — 무기 목록, 설정 이름 */
+td .wep{display:block;color:var(--chalk3);font-size:12.5px;line-height:1.6;margin-top:3px}
+td[rowspan]{vertical-align:top}
+tr.me td{background:rgba(238,241,244,.045)}
+tr.me td:first-child{box-shadow:inset 2px 0 0 var(--chalk)}
+.swipe{font-size:10.5px;color:var(--chalk3);margin:8px 0 0}
+
+/* ── 태그 · 노트 ── */
+/* 근거 태그는 이 사이트의 존재 이유다. 자간이 빠진 만큼 굵기로 눈에 띄게 유지한다 */
+.tag{font-size:9.5px;font-weight:600;padding:2px 6px;border:1px solid;
+  white-space:nowrap;vertical-align:1px;display:inline-block}
+.t-ok{color:var(--ok);border-color:rgba(67,197,158,.42)}
+.t-mid{color:var(--mid);border-color:rgba(229,169,60,.42)}
+.t-bad{color:var(--bad);border-color:rgba(226,96,63,.42)}
+.note{border:1px solid var(--rule);border-left:2px solid var(--rule2);background:var(--slab);
+  padding:16px 20px;font-size:14px;color:var(--chalk2);line-height:1.8}
+.note b{color:var(--chalk);font-weight:500}
+.note + .note{margin-top:1px}
+.cols2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+code{font-family:var(--mono);font-size:13px;color:var(--chalk)}
+
+/* ── 프로 카드 ── */
+.pcards{display:grid;grid-template-columns:repeat(auto-fit,minmax(232px,1fr));gap:1px;background:var(--rule);border:1px solid var(--rule)}
+.pcard{background:var(--slab);padding:16px 17px 15px;display:flex;flex-direction:column}
+.pcard.on{background:#1B222B;box-shadow:inset 2px 0 0 var(--chalk)}
+.pcard .top{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.pcard .nm{font-size:16px;font-weight:600;letter-spacing:-.015em}
+/* 팀명·CS2·VAL은 라틴이라 app.js 템플릿에서 .lat lat-sm 을 붙인다 */
+.pcard .tm{font-size:10px;color:var(--chalk3)}
+.pcard .big{font-family:var(--mono);font-size:28px;font-weight:500;letter-spacing:-.035em;
+  font-variant-numeric:tabular-nums;margin:6px 0 2px}
+.pcard .big u{text-decoration:none;font-size:11px;color:var(--chalk3);margin-left:4px}
+.pcard .meta{font-size:11px;color:var(--chalk3);line-height:1.75;flex:1}
+.pcard button{margin-top:12px;width:100%;background:none;border:1px solid var(--rule2);color:var(--chalk2);
+  font-family:var(--sans);font-size:13px;padding:8px;cursor:pointer;transition:background .14s,color .14s}
+.pcard button:hover{background:var(--chalk);color:var(--ink);border-color:var(--chalk)}
+.pcard.on button{background:var(--chalk);color:var(--ink);border-color:var(--chalk);font-weight:600}
+.seg{display:flex;border:1px solid var(--rule2);width:fit-content;margin-bottom:18px}
+.seg button{background:none;border:0;border-right:1px solid var(--rule2);color:var(--chalk3);
+  font-size:11.5px;font-weight:500;padding:8px 16px;cursor:pointer}
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed="true"]{background:var(--chalk);color:var(--ink);font-weight:600}
+.graft{border:1px solid var(--rule);border-left:2px solid var(--rule2);background:var(--slab);
+  padding:14px 18px;margin-bottom:1px;font-size:14px}
+.graft.p1{border-left-color:var(--bad)} .graft.p2{border-left-color:var(--mid)} .graft.p3{border-left-color:var(--ok)}
+.graft .t{font-weight:600;margin-bottom:4px}
+.graft .w{font-size:13px;color:var(--chalk3);line-height:1.75}
+.graft .w b{color:var(--chalk2);font-weight:500}
+.empty{border:1px dashed var(--rule2);padding:28px 20px;text-align:center;color:var(--chalk3);font-size:14px}
+.revert{background:none;border:1px solid var(--rule2);color:var(--chalk3);
+  font-size:11.5px;font-weight:500;padding:7px 14px;cursor:pointer;margin-left:12px}
+.revert:hover{color:var(--chalk);border-color:var(--chalk2)}
+
+/* ── 섹션 안에서 표를 접는다 ──
+   지우는 게 아니라 접는 것. 근거가 남아 있어야 「직접 대조해보세요」가 공수표가 안 된다 */
+details.fold{border:1px solid var(--rule)}
+details.fold > summary{list-style:none;cursor:pointer;padding:14px 18px;font-size:14px;font-weight:500;
+  color:var(--chalk2);user-select:none;display:flex;align-items:center;gap:11px}
+details.fold > summary::-webkit-details-marker{display:none}
+details.fold > summary::before{content:"+";font-family:var(--mono);font-size:15px;line-height:1;
+  color:var(--chalk3);width:11px;flex:none}
+details.fold[open] > summary::before{content:"−"}
+details.fold > summary:hover{color:var(--chalk)}
+details.fold[open] > summary{border-bottom:1px solid var(--rule)}
+details.fold .foldbody{padding:17px 18px 19px}
+details.fold .foldbody > :first-child{margin-top:0}
+details.fold .scroll{border:0}   /* details 테두리와 겹치지 않게 */
+
+/* 프로 감도를 이식했을 때 바뀐 곳을 짧게 밝힌다. 움직임이 없는 밝기 전환이라
+   prefers-reduced-motion 에서도 남긴다 — 끄면 무엇이 바뀌었는지 알 길이 없어진다 */
+@keyframes lit{from{background-color:rgba(238,241,244,.10)}to{background-color:transparent}}
+.lit{animation:lit 240ms ease-out}
+
+button:focus-visible,summary:focus-visible,a:focus-visible{outline:2px solid var(--chalk);outline-offset:2px}
+footer{border-top:1px solid var(--rule);padding:34px 0 56px;font-size:12.5px;color:var(--chalk3);line-height:1.9}
+footer b{color:var(--chalk2);font-weight:500}
+
+@media(max-width:680px){
+  body{font-size:14.5px}
+  section{padding:44px 0}
+  #hero{padding:44px 0 40px}
+  .conv{grid-template-columns:1fr}
+  .swap{border-left:0;border-right:0;border-top:1px solid var(--rule2);border-bottom:1px solid var(--rule2);padding:9px}
+  .swap button{transform:rotate(90deg)}
+  .band{margin-left:0}
+  .cols2{grid-template-columns:1fr}
+  .legend{display:none}
+}
+/* 44px 는 손가락 기준이지 마우스 기준이 아니다. pointer:fine 에서 폼을 키우면
+   제도판 비례가 무너지므로 터치 환경에서만 넓힌다.
+   복사·⇄ 는 ::after 오버레이라 보이는 크기를 안 건드리고도 44px 가 나온다 —
+   그쪽은 이 미디어쿼리 밖에 그대로 둔다 */
+@media(pointer:coarse){
+  .f input,.f select{min-height:44px}
+  .seg button,.pcard button{min-height:44px}
+  details.adv > summary{padding-top:15px;padding-bottom:15px}
+}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}

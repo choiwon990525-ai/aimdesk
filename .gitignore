@@ -1,0 +1,10 @@
+# 검사 도구의 의존성 — 19MB. 사이트는 정적 파일 세 개뿐이고 이건 배포에 안 들어간다.
+# 다시 받으려면 tools/ 에서 npm install
+tools/node_modules/
+
+# audit.js --shots 가 만드는 스크린샷. 매번 다시 뜬다
+tools/shots/
+
+# 작업 중 만들어진 압축본과 백업 사본
+*.zip
+backup/

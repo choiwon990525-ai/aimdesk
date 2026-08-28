@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>에임데스크 — FPS 감도 변환기</title>
+<meta name="description" content="게임 사이에서 cm/360을 그대로 옮기는 감도 변환기. DPI 변경, 반올림 오차, 검산 절차, 프로 세팅 이식까지.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<!-- 파비콘 — 헤더 마크와 같은 도형. 정적 파일 3개를 지키려고 데이터 URI 로 넣는다.
+     탭 배경이 밝든 어둡든 보이도록 SVG 안에서 prefers-color-scheme 로 색을 바꾼다 -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2016%2016'%3E%3Cstyle%3E:root{color:%230A0C0F}@media(prefers-color-scheme:dark){:root{color:%23EEF1F4}}%3C/style%3E%3Cg%20fill='none'%20stroke='currentColor'%20stroke-width='1.15'%3E%3Cpath%20d='M5.2%200.6V15.4'/%3E%3Cpath%20d='M0.6%205.2H15.4'/%3E%3C/g%3E%3Crect%20x='7.2'%20y='7.2'%20width='7.4'%20height='7.4'%20fill='currentColor'/%3E%3C/svg%3E">
+</head>
+<body>
+
+<header>
+  <div class="wrap hbar">
+    <div class="brand">
+      <!-- 시그니처 마크 — 세로선은 도면의 몸 중심선, 블록은 패드.
+           옆에 워드마크가 이미 있으므로 스크린리더에서는 감춘다 -->
+      <svg class="mk" width="20" height="20" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+        <g fill="none" stroke="currentColor" stroke-width="1.15">
+          <path d="M5.2 0.6V15.4"/><path d="M0.6 5.2H15.4"/>
+        </g>
+        <rect x="7.2" y="7.2" width="7.4" height="7.4" fill="currentColor"/>
+      </svg>
+      <div class="mark lat lat-lg">AIMDESK<i> / 에임데스크</i></div>
+    </div>
+    <div class="legend">
+      <span><b class="lg-ok"></b>검증</span>
+      <span><b class="lg-mid"></b>추론</span>
+      <span><b class="lg-bad"></b>미지원</span>
+    </div>
+  </div>
+</header>
+
+<!-- ═══ 1. 변환기 ═══ -->
+<section id="hero">
+  <div class="wrap">
+    <p class="eyebrow">FPS 감도 변환기</p>
+    <h1><em>감도가 아니라</em> 거리를 옮깁니다</h1>
+    <p class="lead"><b>cm/360</b> 하나만 지키면 게임도 DPI도 바꿔도 손은 그대로입니다.</p>
+
+    <div class="conv" style="margin-top:32px">
+      <div class="side">
+        <p class="lab">지금</p>
+        <div class="f"><label for="game">게임</label><select id="game"></select></div>
+        <div class="f"><label for="sens">감도</label>
+          <input id="sens" type="number" step="0.001" value="0.25" inputmode="decimal">
+          <p class="hint" id="sensHint"></p></div>
+      </div>
+      <div class="swap"><button id="swapBtn" type="button" title="양쪽 바꾸기" aria-label="지금과 바꿀 곳을 교체">⇄</button></div>
+      <div class="side to">
+        <p class="lab">바꿀 곳</p>
+        <div class="f"><label for="toGame">게임</label><select id="toGame"></select></div>
+        <div class="f out"><label for="toSens">감도</label>
+          <input id="toSens" type="number" step="0.0001" inputmode="decimal">
+          <button class="copy" id="copyBtn" type="button">복사</button>
+          <p class="hint" id="toHint">직접 입력하면 왼쪽이 역산됩니다</p></div>
+      </div>
+    </div>
+
+    <details class="adv">
+      <summary>고급 — DPI · cm/360 직접 입력</summary>
+      <div class="advgrid">
+        <div class="f"><label for="dpi">지금 DPI</label><input id="dpi" type="number" step="50" value="800" inputmode="numeric"></div>
+        <div class="f"><label for="toDpi">바꿀 DPI</label><input id="toDpi" type="number" step="50" value="800" inputmode="numeric"></div>
+        <div class="f"><label for="cmIn">cm/360</label><input id="cmIn" type="number" step="0.1" inputmode="decimal"></div>
+        <div class="f"><label for="inIn">inch/360</label><input id="inIn" type="number" step="0.1" inputmode="decimal"></div>
+      </div>
+    </details>
+
+    <!-- 「고급」과 나란히 접어 둔다. 기본은 힙파이어이고 스코프는 필요할 때 펼치는 것 —
+         그 위계를 구조로 드러낸다. 접힌 상태 비용은 한 줄뿐이라 변환 패널이 안 무거워진다 -->
+    <details class="adv">
+      <summary id="scopeSum">스코프 — 무기별 조준 감도</summary>
+      <!-- Apex 1x 는 값이 시야각에 따라 달라져 고정 숫자를 못 박습니다.
+           #scopeBody 는 매 렌더마다 새로 그려지므로 입력칸은 그 바깥에 둡니다 -->
+      <div class="advgrid" id="scopeFov" hidden>
+        <div class="f"><label for="apexFov">Apex 시야각 (FOV) — 최소 70 · 기본 90 · 최대 120</label>
+          <input id="apexFov" type="number" min="70" max="120" step="1" value="90" inputmode="numeric"></div>
+      </div>
+      <div id="scopeBody"></div>
+    </details>
+
+    <div class="readout">
+      <div class="m lat">cm/360<b id="resCm">–</b></div>
+      <div class="m">반 바퀴<b id="resHalf">–</b></div>
+      <div class="m lat">eDPI<b id="resEdpi">–</b></div>
+      <span class="band" id="resBand">–</span>
+    </div>
+    <p class="premise">전제 — 윈도우 포인터 속도 6/11 · 마우스 가속 꺼짐. 조준·스코프는 별개입니다(아래 참조).</p>
+  </div>
+</section>
+
+<!-- ═══ 2. 전체 게임 ═══ -->
+<section>
+  <div class="wrap">
+    <h2>모든 게임 한눈에</h2>
+    <p class="take">지금 감도를 유지한 채 다른 게임을 켠다면, 이 표의 값을 그대로 넣으세요.</p>
+    <p class="sub">cm/360을 그대로 유지하는 값입니다. DPI는 왼쪽 값을 씁니다.</p>
+    <div class="scroll"><table>
+      <thead><tr><th>게임</th><th>감도</th><th>eDPI</th><th>cm/360</th><th>yaw</th><th>근거</th></tr></thead>
+      <tbody id="convBody"></tbody>
+    </table></div>
+    <!-- 스크롤 안내는 app.js 의 markScroll() 이 실제 넘침을 재서 붙입니다.
+         손으로 달면 안 넘치는 표에도 남아 신호가 거짓이 됩니다 -->
+  </div>
+</section>
+
+<!-- ═══ 3. 책상 ═══ -->
+<section class="s-tool">
+  <div class="wrap">
+    <p class="eyebrow">다른 변환기가 안 보여주는 것</p>
+    <h2>이 감도가 당신 책상에 들어갑니까</h2>
+    <p class="take">패드 크기를 넣어보세요. 이 감도로 반 바퀴를 돌릴 수 있는지가
+      아래 도면에 실제 비율로 나옵니다.</p>
+    <p class="sub">cm/360이 65cm라면 반 바퀴를 도는 데 <b>32.5cm</b>가 필요합니다.
+      패드가 그 거리를 못 받아주면 교전 중에 마우스를 들어 올려 다시 놓게 되고,
+      그때마다 크로스헤어가 조준하던 자리에서 벗어납니다.</p>
+    <figure>
+      <div class="fighead">
+        <span>책상 평면도 — 실제 비율</span>
+        <span class="rd">
+          <u>180° 필요 <s id="rdNeed">–</s></u>
+          <u>패드 여유 <s id="rdPad">–</s></u>
+        </span>
+      </div>
+      <svg id="bench" viewBox="0 0 800 372" role="img" aria-label="현재 감도에 필요한 마우스 스윙 폭을 책상 위에 실제 비율로 그린 평면도"></svg>
+      <div class="figfoot">
+        <div class="f"><label for="padW">패드 가로 (mm)</label><input id="padW" type="number" step="10" value="500" inputmode="numeric"></div>
+        <div class="f"><label for="padH">패드 세로 (mm)</label><input id="padH" type="number" step="10" value="500" inputmode="numeric"></div>
+        <div class="f"><label for="deskW">책상 가로 (cm)</label><input id="deskW" type="number" step="5" value="140" inputmode="numeric"></div>
+        <div class="f"><label for="deskD">책상 깊이 (cm)</label><input id="deskD" type="number" step="5" value="70" inputmode="numeric"></div>
+        <div class="f"><label for="kbLayout">키보드 배열</label><select id="kbLayout">
+          <option value="44">풀배열 (약 44cm)</option>
+          <option value="36" selected>텐키리스 (약 36cm)</option>
+          <option value="29">60~65% (약 29cm)</option></select></div>
+      </div>
+    </figure>
+    <p class="swipe">키보드는 마우스 공간을 얼마나 먹는지 보려고 그렸습니다. 배치 각도는 이 계산에 들어가지 않습니다.</p>
+  </div>
+</section>
+
+<!-- ═══ 4. 최적 구간 ═══ -->
+<section>
+  <div class="wrap">
+    <p class="eyebrow">실험으로 확인됨 <span class="tag t-ok">검증</span></p>
+    <h2>최적 구간은 20~80 cm/360</h2>
+    <p class="take">당신 값이 20~80 안에 들어와 있다면, 감도는 그만 만져도 됩니다.</p>
+    <p class="sub">근거는 실측입니다. 주 10~20시간 이상 플레이하는 FPS 게이머 13명에게
+      32배 범위에 걸친 감도 6단계를 각각 500시행씩, 1인당 4000시행을 시켜 완료 시간을 쟀습니다.
+      <b>이 사이트에서 근거가 가장 센 숫자입니다.</b></p>
+    <figure style="margin-bottom:18px">
+      <div class="fighead">
+        <span>감도와 완료 시간 — 연구가 보고한 경향</span>
+        <span class="rd"><u>내 값 <s id="rdMine">–</s></u></span>
+      </div>
+      <svg id="band" viewBox="0 0 800 260" role="img"
+        aria-label="가로축은 cm/360, 세로축은 조준 완료 시간. 20~80 구간에서 가장 빠른 U자 곡선이고 현재 감도의 위치가 세로선으로 표시됩니다"></svg>
+    </figure>
+    <p class="swipe">세로축에 눈금이 없는 이유 — 연구는 <b>골짜기의 위치</b>를 보고했지
+      완료 시간의 절대값을 주지 않았습니다. 곡선의 모양은 보고된 경향이고 세로 척도는 임의입니다.</p>
+
+    <div class="cols2" style="margin-top:22px">
+      <div class="note"><b>양쪽 끝이 왜 나쁜지도 측정됐습니다.</b>
+        감도가 낮으면 인게임 회전 자체가 느립니다. 높이면 회전은 빨라지지만 한 번에 못 맞추고
+        다시 조준하는 일이 늘어서, 보정 동작 횟수가 감도에 거의 비례해 증가합니다.
+        완료 시간은 이 둘의 트레이드오프고 20~80cm이 그 골짜기였습니다. 13명 전원 예외가 없었습니다.</div>
+      <div class="note"><b>흔들림도 같은 구간에서 최소였습니다.</b>
+        평균만이 아니라 완료 시간의 <b>표준편차</b>가 20~80cm 밖에서 유의하게 커졌습니다.
+        프로에게는 평균을 조금 줄이는 것보다 반복성을 높이는 쪽이 중요할 수 있다고 연구도 짚습니다.</div>
+    </div>
+    <div class="note" style="margin-top:18px"><b>구간 안에서 어디에 설지는 연구가 답하지 않습니다.</b>
+      "쉬운 표적은 높은 감도, 어려운 표적은 낮은 감도"라는 <b>방향</b>까지는 같은 연구에 나오지만,
+      역할별 권장값으로 자를 만큼의 데이터는 아닙니다. 그래서 20~80만 씁니다.</div>
+  </div>
+</section>
+
+<!-- ═══ 5. 반올림 ═══ -->
+<section>
+  <div class="wrap">
+    <p class="eyebrow">순수 계산</p>
+    <h2>반올림하면 얼마나 어긋나나</h2>
+    <p class="take">아래 표의 판정이 「차이 없음」이면 반올림해서 넣어도 됩니다.
+      「다시 적응해야 함」이 뜨면 끝자리까지 넣으세요.</p>
+    <p class="sub">게임 입력칸에 소수점을 어디까지 넣느냐에 따라 실제 cm/360이 달라집니다.
+      어떤 게임은 두 자리로 충분하고, 어떤 게임은 끝자리 하나를 버리는 순간
+      패드 위에서 느껴질 만큼 어긋납니다.</p>
+    <div class="scroll"><table>
+      <thead><tr><th>입력값</th><th>실제 cm/360</th><th>목표와 차이</th><th>판정</th></tr></thead>
+      <tbody id="roundBody"></tbody>
+    </table></div>
+    <div class="note" style="margin-top:18px" id="roundNote"></div>
+  </div>
+</section>
+
+<!-- ═══ 6. 검산 ═══ -->
+<section>
+  <div class="wrap">
+    <p class="eyebrow">이 사이트를 믿지 마세요</p>
+    <h2>5분이면 직접 확인됩니다</h2>
+    <p class="take">사격장에서 자로 재보세요. 위에서 나온 값과 ±2cm 안이면 그때 믿으면 됩니다.</p>
+    <p class="sub">계산기가 틀렸을 수도 있고, 패치로 상수가 조용히 바뀌었을 수도 있습니다.
+      cm/360이 표준 단위가 된 이유가 여기 있습니다. <b>자로 잴 수 있으니까요.</b></p>
+    <!-- 아래 표를 대체하지 않습니다. 표는 절차의 순서, 도면은 「어디서 어디까지」입니다 -->
+    <figure style="margin-bottom:18px">
+      <div class="fighead">
+        <span>어디서 어디까지 미는가 — 실제 비율</span>
+        <span class="rd">
+          <u>한 바퀴 <s id="rdFull">–</s></u>
+          <u>반 바퀴 <s id="rdHalfW">–</s></u>
+        </span>
+      </div>
+      <svg id="verify" viewBox="0 0 800 372" role="img"
+        aria-label="패드 왼쪽 끝에서 오른쪽으로 미는 거리를 책상 위에 실제 비율로 그린 평면도. 한 바퀴 거리와 반 바퀴 지점, 패드를 넘는 지점이 표시됩니다"></svg>
+    </figure>
+    <div class="scroll"><table>
+      <thead><tr><th style="width:44px">단계</th><th>절차</th></tr></thead>
+      <tbody>
+        <tr><td class="num">1</td><td>사격장에서 벽의 <b>한 점</b>에 크로스헤어를 맞추고, 마우스를 패드 왼쪽 끝에 붙입니다.</td></tr>
+        <tr><td class="num">2</td><td>마우스를 들지 말고 <b>오른쪽으로 쭉</b> 밀어, 그 점이 다시 크로스헤어에 올 때까지 돌립니다.
+          패드가 모자라면 반대편 벽의 점을 기준으로 <b>반 바퀴</b>만 하고 나중에 2배 하세요.</td></tr>
+        <tr><td class="num">3</td><td>움직인 거리를 잽니다. 그게 실제 cm/360입니다.</td></tr>
+        <tr><td class="num">4</td><td>위 값과 <b>±2cm 안</b>이면 통과입니다. 벗어난다면 원인은 셋 중 하나로,
+          윈도우 포인터 속도가 6/11이 아니거나 마우스 가속이 켜져 있거나 게임에 별도 배율이 걸려 있습니다.</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+</section>
+
+<!-- ═══ 7. 프로 ═══ -->
+<section class="s-tool">
+  <div class="wrap">
+    <p class="eyebrow">대회 방송·본인 공개 자료로 교차확인한 10명</p>
+    <h2>프로 감도를 내 장비로 이식</h2>
+    <p class="take">숫자를 베끼면 손이 달라집니다. 카드를 누르면 그 선수의 cm/360이
+      <b>내 게임·내 DPI</b> 기준으로 환산돼 위쪽 패널에 들어갑니다.</p>
+    <p class="sub">선수가 설정에 넣은 감도 숫자는 그 사람의 DPI와 게임을 전제로 나온 값입니다.
+      같은 숫자를 다른 DPI에 넣으면 손이 도는 거리가 통째로 달라집니다.</p>
+    <div class="seg" id="proFilter" role="group" aria-label="게임 필터">
+      <button aria-pressed="true" data-v="all">전체</button>
+      <button aria-pressed="false" data-v="CS">CS2</button>
+      <button aria-pressed="false" data-v="VAL">발로란트</button>
+    </div>
+    <div class="pcards" id="proCards"></div>
+    <div id="graft" style="margin-top:22px"></div>
+    <figure style="margin-top:24px">
+      <div class="fighead"><span>cm/360 분포에서 내 자리</span></div>
+      <svg id="dist" viewBox="0 0 800 210" role="img" aria-label="프로 10인과 사용자의 cm/360 분포"></svg>
+    </figure>
+    <div class="note" style="margin-top:18px"><b>따라할 자세로 읽지 마세요.</b>
+      레이팅 상위 5명이 자세 상위 5명이라는 근거는 없습니다.
+      게다가 프로들 사이의 편차 자체가 큽니다. 표본 안에서 한 게임 안 8배, 게임 간 12배가 벌어졌습니다.
+      명단이 10명뿐인 이유는 <b>출처를 교차확인한 게 이만큼</b>이기 때문입니다.
+      공개 애그리게이터 다섯 곳에서 TenZ 한 명을 찾으면 eDPI가 240에서 384까지 나옵니다.</div>
+  </div>
+</section>
+
+<!-- ═══ 8. 조준 ═══ -->
+<section>
+  <div class="wrap">
+    <h2>조준 · 스코프는 별개입니다</h2>
+    <p class="take">위에서 맞춘 감도는 힙파이어까지입니다. 스코프를 쓴다면 배율을 따로 넣으세요.</p>
+    <p class="sub">조준하면 시야각이 좁아지기 때문에 같은 마우스 거리가 다른 각도를 만듭니다.
+      <b>CS2 말고는 하나의 숫자로 안 됩니다</b> — 무기나 영웅마다 값이 달라서
+      나눠 적었습니다. 아래는 전부 십자선 기준(0% 매칭) 값이라 게임끼리 기준이 섞이지 않습니다.</p>
+    <div class="scroll"><table>
+      <thead><tr><th>게임 · 설정</th><th>배율 · 무기</th><th>값</th><th>근거</th></tr></thead>
+      <tbody>
+        <tr><td>CS2 · CS:GO<span class="wep"><code>zoom_sensitivity_ratio_mouse</code></span></td>
+          <td>1단 줌<span class="wep">AWP · SSG 08</span></td><td class="num">0.818933</td>
+          <td><span class="tag t-ok">검증</span> 초점거리 1:1(0% 매칭) 값. 커뮤니티가 테스트로 확립했고
+            삼각법에서 독립적으로 같은 값을 유도한 계산기가 있습니다.
+            <b>1단 줌에서 정확</b>하고 나머지 줌은 약 4% 안입니다.</td></tr>
+        <tr><td>CS2 기본값<span class="wep">같은 설정</span></td>
+          <td>전 줌 공통</td><td class="num">1.0</td>
+          <td><span class="tag t-mid">추론</span> 4:3 화면 끝에서 맞는 값이라는 설명이 있습니다.
+            0.818933으로 바꾸는 건 <b>기준점을 바꾸는 것</b>이지 하나가 틀린 게 아닙니다.
+            발로란트 1.0이 화면 끝 매칭이라는 게 확인됐지만 그건 다른 엔진 이야기라
+            이 칸의 근거가 되지는 않습니다.</td></tr>
+
+        <tr><td rowspan="6">발로란트<span class="wep">조준 · 스코프 배율</span></td>
+          <td>1.15×<span class="wep">스팅어 · 스펙터 · 아레스 · 오딘</span></td><td class="num">0.908</td>
+          <td rowspan="6"><span class="tag t-ok">검증</span> <b>기본값 1.0은 화면 끝(100%) 매칭입니다.</b>
+            1.0에서는 화면 끝까지 플릭하는 마우스 거리가 스코프를 켜든 끄든 같습니다 — 그게 100% 가로 매칭의 정의입니다.
+            「1.0이 모든 스코프에서 0% 매칭」이라던 출처가 틀렸습니다.
+            왼쪽 값들은 그와 별개로 <b>십자선 기준(0%)</b>에 맞추는 배율이고, 무기 배율마다 다릅니다.</td></tr>
+        <tr><td>1.25×<span class="wep">불독 · 팬텀 · 밴달</span></td><td class="num">0.870</td></tr>
+        <tr><td>1.5×<span class="wep">가디언 · 헤드헌터</span></td><td class="num">0.815</td></tr>
+        <tr><td>2.5×<span class="wep">오퍼레이터 1단 · 투르 드 포스</span></td><td class="num">0.747</td></tr>
+        <tr><td>3.5×<span class="wep">마샬 · 아웃로</span></td><td class="num">0.731</td></tr>
+        <tr><td>5×<span class="wep">오퍼레이터 2단</span></td><td class="num">0.723</td></tr>
+
+        <tr><td rowspan="2">오버워치 2<span class="wep">조준 시 상대 감도</span></td>
+          <td>약 2.0×<span class="wep">위도우메이커 · 아나</span></td><td class="num">37.89%</td>
+          <td rowspan="2"><span class="tag t-ok">검증</span> 출처 두 곳이 37.89~37.93 / 51.47~51.53으로 수렴합니다.
+            <b>이 표에서 유일하게 공식으로 재유도됩니다.</b> 계수로 스코프 화각을 거꾸로 풀면
+            <code>2·atan(c·tan(103°÷2))</code>에서 위도우 <b>50.9°</b>(약 2.0×), 애쉬 <b>65.8°</b>(약 1.6×)가 나옵니다.
+            더 많이 당기는 쪽이 더 낮은 값이라는 물리도 맞습니다.
+            한 포럼의 「수정본」 51.21 / 69.56은 애쉬가 1.25×로 나와 스코프치고 배율이 너무 낮아 버렸습니다.
+            <b>FOV 103 기준이며 시야각을 바꾸면 값도 달라집니다.</b>
+            오버워치 2에서 100%가 각속도 동일(cm/360 유지)이고 37.89%가 십자선 매칭이라
+            발로란트 줄과 기준이 같습니다.</td></tr>
+        <tr><td>약 1.6×<span class="wep">애쉬</span></td><td class="num">51.47%</td></tr>
+
+        <tr><td rowspan="3">Apex Legends<span class="wep">배율별 ADS 감도</span></td>
+          <td>1×<span class="wep">기본 조준</span></td><td class="num" style="color:var(--mid)">미해결</td>
+          <td rowspan="3"><span class="tag t-mid">추론</span> <b>확인된 것은 조준 화각까지입니다.</b>
+            EA 공식 포럼 기준으로 조준 시야가 AR·LMG·저격은 힙파이어보다 <b>18% 낮고</b>,
+            SMG·산탄총·권총은 <b>12% 낮습니다.</b> 그런데 이 두 무기군이 <b>1× 슬라이더 하나를 공유</b>하므로
+            한 값으로 둘 다 맞출 수 없습니다. 설정으로 해결되지 않는 게임 구조 문제입니다.
+            <br><br><b>1× 슬라이더 값은 아직 못 냅니다.</b> Apex가 이 슬라이더를 곱하는지 나누는지
+            확인되지 않아, 배수를 계산하면 역수를 답으로 내놓을 위험이 있습니다.
+            2×·3×의 값은 <b>선형(cm/360) 매칭</b>이라 위 발로란트·오버워치 2 줄(0% 매칭)과
+            <b>기준이 다릅니다.</b> 같은 표에 있지만 같은 자로 잰 값이 아닙니다.
+            4× 이상은 교차확인된 출처가 없어 미확인입니다 — 불가능하다는 뜻은 아닙니다.</td></tr>
+        <tr><td>2×<span class="wep">선형 매칭</span></td><td class="num">1.111</td></tr>
+        <tr><td>3×<span class="wep">선형 매칭</span></td><td class="num">1.333</td></tr>
+      </tbody>
+    </table></div>
+    <p class="premise">각주 — 이 표의 값은 모두 독립된 3자 출처의 교차확인이며,
+      게임사가 공식 문서로 공표한 값은 없습니다. 다만 <b>근거의 결이 줄마다 다릅니다.</b>
+      오버워치 2는 계수에서 스코프 화각이 삼각법으로 정확히 역산돼 재유도가 됩니다.
+      발로란트와 CS2는 게임 내부 보정을 알 수 없어 <b>공식으로는 재유도되지 않고</b>,
+      같은 삼각법으로 세운 모델이 최대 5% 어긋납니다 — 출처 일치에만 기대고 있습니다.
+      틀린 배율은 오퍼레이터 한 발을 날리니, 중요한 무기는 검산 절차로 직접 재보세요.</p>
+  </div>
+</section>
+
+<!-- ═══ 9. FOV ═══ -->
+<section class="s-note">
+  <div class="wrap">
+    <h2>숫자가 맞아도 느낌이 다른 이유</h2>
+    <p class="take">환산은 맞았는데 어색하다면, 감도를 되돌리지 마세요. 며칠이면 눈이 적응합니다.</p>
+    <div class="cols2">
+      <div class="note"><b>FOV가 다릅니다.</b> cm/360이 같아도 화면에 담기는 각도가 다르면
+        같은 물리 거리에서 표적이 다른 속도로 지나갑니다. 발로란트는 어느 화면비에서도 수평 103°로 고정,
+        CS2는 세로 FOV를 고정해 4:3이면 90°, 16:9면 약 106°입니다.
+        수학은 맞고 감각이 어긋난 것뿐이라 데스매치 한두 판이면 붙습니다.</div>
+      <div class="note"><b>해상도는 cm/360을 바꾸지 않습니다.</b>
+        1280×960 스트레치로 바꿔도 물리 거리는 그대로입니다. 적이 넓어 보이고 빨라 보일 뿐입니다.
+        <b>해상도를 바꿨다고 감도를 다시 만지면 근육 기억만 흔듭니다.</b></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 10. 상수 ═══ -->
+<section>
+  <div class="wrap">
+    <h2>쓰는 상수와 확인 날짜</h2>
+    <!-- 접되 지우지 않는다. 「이 사이트를 믿지 마세요 · 직접 대조해보세요」의 근거라
+         없애면 그 초대가 공수표가 된다. 일반 사용자는 안 보고 의심하는 사람만 펼친다 -->
+    <details class="fold">
+      <summary>직접 대조하려면 펼치세요 — 게임 7개의 yaw 상수와 출처</summary>
+      <div class="foldbody">
+        <p class="sub">yaw는 감도 1.0에서 마우스 1카운트가 만드는 회전각(도)입니다.
+          패치로 바뀔 수 있어 날짜를 같이 답니다.</p>
+        <div class="scroll"><table>
+          <thead><tr><th>게임</th><th>yaw</th><th>입력 형태</th><th>근거 · 확인</th></tr></thead>
+          <tbody id="constBody"></tbody>
+        </table></div>
+        <p class="premise">각주 — 이 표의 yaw 상수는 모두 독립된 3자 출처의 교차확인이며,
+          게임사가 공식 문서로 공표한 값은 없습니다. 배율 검산(10.6061 · 0.1260)은 출처 간에 일치합니다.</p>
+      </div>
+    </details>
+  </div>
+</section>
+
+<!-- ═══ 11. 안 넣은 것 ═══ -->
+<!-- .s-note 는 「닫는 글」이라 여백을 좁힌 것이지 내용이 가벼워서가 아닙니다.
+     무게는 2군(근거·판단)급입니다. 부록으로 오해해서 접거나 지우지 마세요 —
+     CLAUDE.md 「절대 바꾸지 말 것」 6번. -->
+<section class="s-note">
+  <div class="wrap">
+    <p class="eyebrow">로드맵</p>
+    <h2>일부러 안 넣은 것</h2>
+    <p class="sub">근거가 없는 기능은 있는 것보다 없는 게 낫습니다.
+      아래는 만들었다가 뺀 것들이고, <b>근거가 채워지는 순서대로</b> 돌아옵니다.</p>
+    <!-- 선언(눈썹·제목·리드)은 펼쳐 둔 채 목록만 접는다.
+         선언까지 접으면 「일부러 안 넣었다」는 말 자체가 안 보인다 -->
+    <details class="fold">
+      <summary>뺀 기능 6개 — 왜 뺐고 무엇이 채워지면 돌아오는지</summary>
+      <div class="foldbody">
+    <div class="scroll"><table>
+      <thead><tr><th>기능</th><th>왜 뺐나</th><th>돌아오려면</th></tr></thead>
+      <tbody>
+        <tr><td>자세 점수 (8축)</td>
+          <td>축 8개 중 3개(스윙 여유·좌우 대칭·몸통 각도)가 문헌에 없고,
+            두 점수로 합치는 집계식도 제가 만든 것입니다.</td>
+          <td>선수 표본에서 그 세 축의 임계값을 실측</td></tr>
+        <tr><td>책상 · 의자 · 모니터 높이</td>
+          <td>한국인 인체 비율 중 <b>앉은 눈높이</b>가 일본인 데이터 근사치입니다.
+            원자료를 확보하기 전에는 cm 단위 지시를 내리면 안 됩니다.</td>
+          <td>Size Korea 원자료 확보</td></tr>
+        <tr><td>키보드 배치 각도</td>
+          <td>회전 <b>방향</b>은 인체공학 키보드 규격과 일치해 검증됐지만,
+            15~25°라는 <b>크기</b>는 양손 타이핑 연구에서 옮겨온 추론입니다.</td>
+          <td>한손 FPS 자세에서 각도 실측</td></tr>
+        <tr><td>역할별 감도 하위 구간</td>
+          <td>연구는 방향만 보여줬는데 제가 20~40 / 55~80 같은 경계선을 그었습니다.</td>
+          <td>역할별 표본에서 경계 확인</td></tr>
+        <tr><td>감도 전환 4주 계획</td>
+          <td>근거가 <b>반대</b>를 가리킵니다. 32배 범위를 겪은 뒤 원래 감도로 돌아온 실험에서
+            성적 저하가 유의하지 않았고, 적응은 약 5분 안에 대부분 끝났습니다.</td>
+          <td>숙련자에 한해 저하가 있었으므로 아카데미 표본에서 재확인</td></tr>
+        <tr><td>패드 "여유 10cm" 권장</td>
+          <td>제가 지어낸 숫자입니다. 지금은 <b>180° 필요 거리</b>만 씁니다 — 그건 순수 계산입니다.</td>
+          <td>리프트가 성능에 주는 손해를 실측</td></tr>
+      </tbody>
+    </table></div>
+      </div>
+    </details>
+  </div>
+</section>
+
+<footer><div class="wrap">
+  <b>계산</b> — cm/360 = 360 × 2.54 ÷ (yaw × DPI × 감도). 게임 간 변환은 이 값을 고정한 채 양쪽 yaw·DPI로 역산합니다.<br>
+  <b>확인</b> — 상수 재검증 2026-08-28. 틀린 값을 발견하시면 위 검산 절차로 재보시고 알려주세요.<br>
+  <b>범위</b> — 이 도구는 감도와 장비 치수만 다룹니다. 의료·건강 조언이 아닙니다.
+</div></footer>
+
+<script src="app.js"></script>
+</body>
+</html>
