@@ -336,13 +336,58 @@ function drawBand(){
    복제하면 한쪽만 고쳐져 어긋난다 — 팔레트 사본에서 이미 겪었다.
    p 에 바탕을 채워 돌려주고, 호출부가 제 요소를 push 한 뒤 tail() 로 마무리한다.
    순서를 이렇게 나눈 이유는 치수선·경고가 도면별 요소보다 뒤에 와야 하기 때문이다. */
-function benchBase(){
-  const VW = MOB?460:800, VH = MOB?300:372, F = MOB?1.75:1;
+/* ══ 도형 공통 도구층 ═══════════════════════════════
+   좌표계가 아니라 「글자와 선을 어떻게 얹느냐」만 담는다.
+   책상 평면도(benchBase)와 측면도(sideBase)는 좌표계가 서로 다르지만
+   배율·라벨·장애물 회피는 같은 규칙을 써야 한다. 복제하면 한쪽만 고쳐져 어긋난다.
+     OB   라벨이 올라타면 안 되는 도형 목록. 호출부가 채운다
+     p    SVG 조각 배열. 호출부가 push 한 뒤 paint() 로 끝낸다 */
+function figBase(VW, VH, F){
   const fs = n => +(n*F).toFixed(1);
   /* 선 굵기도 폰트와 같은 배율을 탄다. 안 그러면 모바일에서 글자만 커지고 선은
      36% 얇아져 잉크 균형이 뒤집힌다. 세 단계뿐 —
      1 참조선(중심선·눈금·치수선) · 1.5 사물(외곽선·원) · 2.4 측정값(스윙선·나 마커) */
   const sw = n => +(n*F).toFixed(2);
+  const TP = (x,y,t,fill,px,anchor,weight) =>
+    `<text x="${x}" y="${y}" fill="${fill}" font-family="IBM Plex Mono,monospace" font-size="${+px.toFixed(1)}"${anchor?` text-anchor="${anchor}"`:""}${weight?` font-weight="${weight}"`:""}>${t}</text>`;
+  const T = (x,y,t,fill,size,anchor,weight) => TP(x,y,t,fill,fs(size),anchor,weight);
+
+  const OB = [];
+  /* 한글 어센트는 em 상자를 넘는다 — 9.5px 글자에서 9.83px (tools/audit.js 실측).
+     0.88로 잡았더니 「몸 중심선」이 모니터 막대에 0.8px 물렸다 */
+  const ASC = 1.05;
+  /* 글자 상자가 도형에 물리면 그 도형 아래로 내린다 */
+  const clearY = (y,px,ax,bx) => {
+    for (const o of OB)
+      if (bx > o.a && ax < o.b && y > o.t - px*ASC && y - px*ASC < o.u) y = o.u + px*(ASC+0.15);
+    return y;
+  };
+  const p = [];
+  /* 가운데 정렬 라벨: 너무 넓으면 줄이고, 도형이나 뷰박스에 물리면 옆으로 민다 */
+  /* bound=[좌,우] 를 주면 그 안에 가둔다 — 패드 안에 두는 라벨이 테두리를 넘지 않게.
+     안 주면 뷰박스만 본다(기존 동작) */
+  const put = (x,y,t,fill,size,weight,maxW,bound) => {
+    let px = fs(size), w = tw(t,px)*TWPAD;
+    const lim = Math.min(VW-12, maxW || Infinity);
+    if (w > lim){ px = Math.max(px*0.62, px*lim/w); w = tw(t,px)*TWPAD; }
+    let lo = 6 + w/2; let hi = VW - 6 - w/2;
+    if (bound){ lo = Math.max(lo, bound[0] + w/2); hi = Math.min(hi, bound[1] - w/2); }
+    for (const o of OB)
+      if (y > o.t - px*ASC && y - px*ASC < o.u && x > o.b) lo = Math.max(lo, o.b + fs(4) + w/2);
+    p.push(TP(clamp(x, Math.min(lo,hi), hi), y, t, fill, px, "middle", weight));
+  };
+  const paint = id => {
+    const el = $(id);
+    el.setAttribute("viewBox", `0 0 ${VW} ${VH}`);
+    el.innerHTML = p.join("");
+  };
+  return { VW, VH, F, fs, sw, TP, T, OB, ASC, clearY, p, put, paint };
+}
+
+function benchBase(){
+  const VW = MOB?460:800, VH = MOB?300:372, F = MOB?1.75:1;
+  const B = figBase(VW, VH, F);
+  const { fs, sw, T, OB, clearY, p, put } = B;
   const PX = MOB?16:26, PY = MOB?14:22, BOT = MOB?30:26;
   const dw = S.deskW, dd = S.deskD;
   const k = Math.min((VW - PX*2)/dw, (VH - PY*2 - BOT)/dd);     /* px per cm */
@@ -359,31 +404,15 @@ function benchBase(){
   const my = padT + ph*0.55, sx = padL + pw*0.5;
   const fits = S.half <= S.padW/10;
   const col = fits ? C.ok : C.bad;
-  const TP = (x,y,t,fill,px,anchor,weight) =>
-    `<text x="${x}" y="${y}" fill="${fill}" font-family="IBM Plex Mono,monospace" font-size="${+px.toFixed(1)}"${anchor?` text-anchor="${anchor}"`:""}${weight?` font-weight="${weight}"`:""}>${t}</text>`;
-  const T = (x,y,t,fill,size,anchor,weight) => TP(x,y,t,fill,fs(size),anchor,weight);
-
   /* ── 라벨이 올라타면 안 되는 도형들 ──
      모니터 막대와 (18° 기울어진) 키보드. 라벨 배치는 이 목록을 보고 피한다. */
   const mw = 55*k, monY = y0+5, monH = 5;
   const KC = Math.cos(18*Math.PI/180), KS = Math.sin(18*Math.PI/180);
   const kbEx = (kw/2)*KC + (kh/2)*KS, kbEy = (kw/2)*KS + (kh/2)*KC;
   const kbL = kbCx-kbEx, kbR = kbCx+kbEx, kbT = kbCy-kbEy, kbB = kbCy+kbEy;
-  const OB = [
-    {a:cx-mw/2, b:cx+mw/2, t:monY, u:monY+monH},   /* 모니터 */
-    {a:kbL, b:kbR, t:kbT, u:kbB}                   /* 키보드 회전 bbox */
-  ];
-  /* 한글 어센트는 em 상자를 넘는다 — 9.5px 글자에서 9.83px (tools/audit.js 실측).
-     0.88로 잡았더니 「몸 중심선」이 모니터 막대에 0.8px 물렸다 */
-  const ASC = 1.05;
-  /* 글자 상자가 도형에 물리면 그 도형 아래로 내린다 */
-  const clearY = (y,px,ax,bx) => {
-    for (const o of OB)
-      if (bx > o.a && ax < o.b && y > o.t - px*ASC && y - px*ASC < o.u) y = o.u + px*(ASC+0.15);
-    return y;
-  };
+  OB.push({a:cx-mw/2, b:cx+mw/2, t:monY, u:monY+monH});   /* 모니터 */
+  OB.push({a:kbL, b:kbR, t:kbT, u:kbB});                  /* 키보드 회전 bbox */
 
-  const p = [];
   p.push(`<defs><pattern id="hatch" width="6" height="6" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
     <line x1="0" y1="0" x2="0" y2="6" stroke="rgba(238,241,244,.10)" stroke-width="${sw(1)}"/></pattern></defs>`);
   p.push(`<rect x="${x0}" y="${y0}" width="${W}" height="${H}" fill="#0F1419" stroke="${C.rule2}" stroke-width="${sw(1.5)}"/>`);
@@ -403,19 +432,6 @@ function benchBase(){
   p.push(`<rect x="${padL}" y="${padT}" width="${pw}" height="${ph}" fill="url(#hatch)" stroke="${C.chalk3}" stroke-width="${sw(1.5)}"/>`);
   p.push(T(padL+4, padT+fs(13), `패드 ${S.padW}×${S.padH}`, C.chalk3, 9.5));
 
-  /* 가운데 정렬 라벨: 너무 넓으면 줄이고, 도형이나 뷰박스에 물리면 옆으로 민다 */
-  /* bound=[좌,우] 를 주면 그 안에 가둔다 — 패드 안에 두는 라벨이 테두리를 넘지 않게.
-     안 주면 뷰박스만 본다(기존 동작) */
-  const put = (x,y,t,fill,size,weight,maxW,bound) => {
-    let px = fs(size), w = tw(t,px)*TWPAD;
-    const lim = Math.min(VW-12, maxW || Infinity);
-    if (w > lim){ px = Math.max(px*0.62, px*lim/w); w = tw(t,px)*TWPAD; }
-    let lo = 6 + w/2; let hi = VW - 6 - w/2;
-    if (bound){ lo = Math.max(lo, bound[0] + w/2); hi = Math.min(hi, bound[1] - w/2); }
-    for (const o of OB)
-      if (y > o.t - px*ASC && y - px*ASC < o.u && x > o.b) lo = Math.max(lo, o.b + fs(4) + w/2);
-    p.push(TP(clamp(x, Math.min(lo,hi), hi), y, t, fill, px, "middle", weight));
-  };
   /* 치수선·책상 라벨·경고는 도면별 요소보다 뒤에 와야 한다 */
   const tail = () => {
     p.push(`<line x1="${x0}" y1="${front+fs(12)}" x2="${x0+W}" y2="${front+fs(12)}" stroke="${C.chalk3}" stroke-width="${sw(1)}"/>`);
@@ -423,12 +439,7 @@ function benchBase(){
     /* 경고는 도면 위쪽에 두면 모바일에서 뷰박스 밖으로 잘린다. 치수선 아래로 내린다 */
     if (over) p.push(T(x0+W, front+fs(38), "패드가 책상 폭을 넘습니다", C.bad, 10, "end"));
   };
-  const paint = id => {
-    const el = $(id);
-    el.setAttribute("viewBox", `0 0 ${VW} ${VH}`);
-    el.innerHTML = p.join("");
-  };
-  return { VW, VH, F, fs, sw, TP, T, put, clearY, p, tail, paint,
+  return { ...B, tail,
            k, x0, y0, W, H, cx, front, padL, padT, pw, ph, my, sx, over, fits, col };
 }
 
@@ -757,7 +768,250 @@ function moveRail(sc, rail){
 function render(){ read(); drawConvert(); drawScope(); drawBand(); drawBench(); drawVerify(); drawPro(); markScroll(); }
 
 /* ══ 초기화 ══ */
+/* ══════════════════════════════════════════════════
+   자세 캘리브레이션 (posture.html)
+   ══════════════════════════════════════════════════
+   여기 있는 값은 전부 사용자가 직접 잰 것이다.
+   ★ 키에서 비율로 몸 치수를 추정하지 않는다. research/06 의
+     R={pop:.2310, elb:.1504, eye:.4590} 이 그 코드였고, 그게 자세 기능이
+     통째로 빠진 이유다. 「빈칸이 불편하다」는 이유로 되살리지 말 것 —
+     tools/values.js 17번이 이걸 막는다. 안 잰 값은 비워 둔다. */
+
+/* ★ 이 페이지는 [검증] 만 싣는다. [추론] 이 붙는 항목은 아예 안 넣는다.
+   시선 하방각(15~20°)이 그래서 빠졌다 — ISO 9241-5 와 충돌해 어느 쪽도 사실로 못 낸다.
+   모든 출처가 동의하는 「화면 상단 ≤ 눈높이」만 남긴다. 각도 밴드도 각주도 되살리지 말 것. */
+
+const PM = {};                       /* 잰 값. null 이면 「안 쟀다」 */
+function readPosture(){
+  for (const k of ["mPop","mElb","mEye","mSeat","mDesk","mTop","mMonH","mDist"])
+    PM[k] = $("#"+k) ? num($("#"+k)) : null;
+  PM.fix = $("#mFix") && $("#mFix").value === "fix";
+  const P = {};
+  /* 앉은 눈높이는 바닥 기준으로 잰다(research/07 ④). 좌면 기준으로 바꾸려면
+     같이 잰 현재 좌면을 뺀다. 추정이 아니라 잰 값끼리의 뺄셈이다 */
+  P.eyeSeat = (PM.mEye != null && PM.mSeat != null) ? PM.mEye - PM.mSeat : null;
+  P.seat    = PM.mPop != null ? PM.mPop + 1 : null;                /* 발바닥이 바닥에 닿는 높이 */
+  P.foot    = null;
+  if (PM.fix && PM.mDesk != null && PM.mElb != null){
+    /* 책상이 기준점 — 팔에 맞춰 좌면을 역산하고 모자란 만큼 발을 받친다 */
+    P.desk = PM.mDesk;
+    P.seat = PM.mDesk - PM.mElb - 1;
+    if (PM.mPop != null) P.foot = P.seat - (PM.mPop + 1);
+  } else if (P.seat != null && PM.mElb != null){
+    P.desk = P.seat + PM.mElb + 1;
+  }
+  P.eye = (P.seat != null && P.eyeSeat != null) ? P.seat + P.eyeSeat : null;
+  /* 화면 상단은 눈높이 이하 — 고개는 중립으로 두고 눈만 내린다.
+     모든 출처가 동의하는 유일한 화면 기준이다. 각도는 안 낸다 */
+  P.topMax = P.eye;
+  return P;
+}
+
+/* ── 모순 검사 (research/07) ── */
+function postureWarn(P){
+  const w = [];
+  if (PM.mSeat != null && PM.mPop != null){
+    const g = PM.mSeat - PM.mPop;
+    if (g > 2.5) w.push(["bad", `좌면이 오금높이보다 <b>${r1(g)}cm</b> 높습니다 — 계산상 발이 떠야 합니다.
+      발이 안 뜬다면 둘 중 하나가 틀렸습니다: 좌면을 <b>빈 의자</b>나 <b>좌판 뒤쪽</b>에서 쟀거나,
+      오금높이를 <b>무릎 앞·위</b>로 쟀을 가능성.
+      앉은 채로 발밑에 손바닥을 넣어보세요 — 안 들어가면 좌면 쪽이 틀렸습니다.`]);
+    else if (g < -3) w.push(["mid", `좌면이 오금높이보다 <b>${r1(-g)}cm</b> 낮습니다.
+      무릎이 골반보다 올라가 골반이 뒤로 말립니다.`]);
+  }
+  if (PM.mSeat != null && PM.mDesk != null){
+    const g = PM.mDesk - PM.mSeat;
+    if (g < 18) w.push(["mid", `책상과 좌면 간격이 <b>${r1(g)}cm</b>로 좁습니다. 허벅지가 상판에 닿을 수 있습니다.`]);
+    else if (g > 32) w.push(["mid", `책상과 좌면 간격이 <b>${r1(g)}cm</b>로 넓습니다. 팔을 올리거나 어깨를 들어야 할 가능성이 있습니다.`]);
+  }
+  if (PM.mTop != null && PM.mMonH != null && PM.mMonH >= PM.mTop)
+    w.push(["bad", `모니터 세로 길이가 화면 상단 높이보다 큽니다 — 둘 중 하나를 잘못 쟀습니다.`]);
+  if (PM.mEye != null && PM.mSeat != null && PM.mEye - PM.mSeat < 40)
+    w.push(["bad", `앉은 눈높이 − 좌면 = <b>${r1(PM.mEye-PM.mSeat)}cm</b>. 사람 상체로는 너무 짧습니다.
+      앉은 눈높이는 <b>바닥에서</b> 재는 값입니다 — 좌면에서 재지 않았는지 확인하세요.`]);
+  const el = $("#mWarn");
+  el.innerHTML = w.length
+    ? `<p class="mlab">모순 검사</p>` + w.map(([c,t]) =>
+        `<div class="note wn-${c}">${t}</div>`).join("")
+    : "";
+}
+
+/* ── 목표 표 ── */
+function postureTable(P){
+  const miss = "<span class='mno'>재야 나옵니다</span>";
+  /* 전부 [검증] 이다. 근거가 갈리는 항목은 표에 넣지 않는다 — 태그로 낮춰 싣지도 않는다 */
+  const rows = [
+    ["좌면 높이", PM.fix ? "책상 − 앉은 팔꿈치높이 − 1cm" : "오금높이 + 1cm",
+     P.seat != null ? r1(P.seat)+"cm" : miss,
+     PM.fix ? "책상이 고정이라 좌면을 역산합니다" : "발바닥 전체가 바닥에 닿는 높이"],
+    ["책상 높이", PM.fix ? "지금 값 고정" : "좌면 + 앉은 팔꿈치높이 + 1cm",
+     P.desk != null ? r1(P.desk)+"cm" : miss,
+     "책상이 팔꿈치보다 높으면 어깨 거상·척측편위가 늡니다 (Rempel 2009)"],
+    ["눈높이", "목표 좌면 + (앉은 눈높이 − 지금 좌면)", P.eye != null ? r1(P.eye)+"cm" : miss,
+     "잰 값끼리의 산수입니다. 추정 없음"],
+    ["화면 상단", "눈높이 이하", P.topMax != null ? "≤ "+r1(P.topMax)+"cm" : miss,
+     "고개는 중립으로 두고 눈만 내립니다. 모든 출처가 동의하는 유일한 화면 기준입니다"],
+  ];
+  if (P.foot != null) rows.push(["발판 높이", "목표 좌면 − (오금높이 + 1cm)",
+    P.foot <= 0.5 ? "불필요" : r1(P.foot)+"cm",
+    P.foot <= 0.5 ? "이 좌면에서 발이 바닥에 닿습니다"
+                  : "좌면을 올린 만큼 발을 받쳐 하체 90°를 되찾습니다"]);
+  $("#targetBody").innerHTML = rows.map(([a,b,c,d]) =>
+    `<tr><td>${a}</td><td class="lat-mix">${b}</td><td><b>${c}</b></td>
+     <td><span class="tag t-ok">검증</span> ${d}</td></tr>`).join("");
+}
+
+/* ══ 측면도 ═══════════════════════════════════════
+   좌표계는 책상 평면도와 다르다(옆에서 본 높이). 공유하는 건 좌표가 아니라
+   figBase() 의 배율·라벨·장애물 회피다.
+   안 잰 값은 그리지 않는다 — 그럴듯한 기본값을 넣으면 그게 추정이다. */
+function drawSide(){
+  const P = readPosture();
+  const VW = MOB ? 460 : 800, VH = MOB ? 340 : 420, F = MOB ? 1.75 : 1;
+  const B = figBase(VW, VH, F);
+  const { fs, sw, T, TP, p, put, paint } = B;
+
+  const hs = [PM.mSeat, PM.mDesk, PM.mTop, PM.mEye, P.seat, P.eye, P.desk]
+    .filter(v => v != null);
+  if (!hs.length){
+    p.push(TP(VW/2, VH/2, "재야 나옵니다 — 위에 값을 넣으세요", C.chalk3, fs(13), "middle", 500));
+    paint("#side"); $("#sideOut").innerHTML = ""; return;
+  }
+
+  const GUT = fs(92);                                    /* 오른쪽 높이 라벨 자리 */
+  const L = fs(10), R = VW - GUT, TOPY = fs(18), BOT = VH - fs(30);
+  const maxH = Math.max(...hs) + 14;
+  const dist = PM.mDist;
+  const spanX = 26 + (dist != null ? dist + 16 : 72);
+  const k = Math.min((R - L)/spanX, (BOT - TOPY)/maxH);  /* px per cm */
+  /* 세로가 병목이면 가로에 여유가 남는다. 왼쪽에 몰아 두면 도면이 한쪽으로 쏠린다 */
+  const OFF = Math.max(0, (R - L - spanX*k) / 2);
+  const X = c => L + OFF + (c + 26)*k;
+  const Y = c => BOT - c*k;
+
+  /* 오른쪽에 붙는 높이 라벨. 겹치면 아래위로 벌린다 */
+  const lab = [];
+  const addLab = (h, t, col, weight) => { if (h != null) lab.push({ y: Y(h), t, col, weight: weight || 500 }); };
+
+  p.push(`<defs><pattern id="band" width="6" height="6" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+    <line x1="0" y1="0" x2="0" y2="6" stroke="rgba(238,241,244,.13)" stroke-width="${sw(1)}"/></pattern></defs>`);
+
+  /* 바닥 */
+  p.push(`<line x1="${X(-26)}" y1="${BOT}" x2="${R}" y2="${BOT}" stroke="${C.chalk3}" stroke-width="${sw(1.5)}"/>`);
+  p.push(T(X(-26), BOT + fs(15), "바닥", C.chalk3, 9.5));
+
+  /* 목표선 — 점선 한 줄. 구간이 아니라 값이다.
+     구간으로 그리던 항목(책상 ±2cm · 시선각)은 근거가 갈려서 아예 뺐다 */
+  const goal = (h, x0, x1) => {
+    if (h == null) return;
+    p.push(`<line x1="${X(x0)}" y1="${Y(h)}" x2="${X(x1)}" y2="${Y(h)}" stroke="${C.chalk}" stroke-width="${sw(1.5)}" stroke-dasharray="6 4"/>`);
+  };
+
+  /* ── 의자 ── */
+  if (PM.mSeat != null){
+    p.push(`<rect x="${X(-22)}" y="${Y(PM.mSeat)}" width="${40*k}" height="${sw(5)}" fill="${C.chalk3}"/>`);
+    p.push(`<rect x="${X(-22)}" y="${Y(PM.mSeat+40)}" width="${sw(5)}" height="${40*k}" fill="${C.chalk3}"/>`);
+    p.push(`<line x1="${X(-2)}" y1="${Y(PM.mSeat)}" x2="${X(-2)}" y2="${BOT}" stroke="${C.chalk3}" stroke-width="${sw(2.4)}"/>`);
+    addLab(PM.mSeat, `지금 좌면 ${r1(PM.mSeat)}`, C.chalk2);
+  }
+  goal(P.seat, -24, 18);
+  if (P.seat != null) addLab(P.seat, `목표 좌면 ${r1(P.seat)}`, C.chalk, 600);
+
+  /* ── 책상 ── */
+  const dx1 = dist != null ? dist + 6 : 66;
+  if (PM.mDesk != null){
+    p.push(`<rect x="${X(2)}" y="${Y(PM.mDesk)}" width="${(dx1-2)*k}" height="${sw(5)}" fill="${C.chalk2}"/>`);
+    addLab(PM.mDesk, `지금 책상 ${r1(PM.mDesk)}`, C.chalk2);
+  }
+  if (!PM.fix){
+    goal(P.desk, 2, dx1);
+    if (P.desk != null) addLab(P.desk, `목표 책상 ${r1(P.desk)}`, C.chalk, 600);
+  }
+
+  /* ── 몸: 눈 ── */
+  if (PM.mEye != null){
+    p.push(`<circle cx="${X(0)}" cy="${Y(PM.mEye)}" r="${sw(5)}" fill="${C.chalk2}"/>`);
+    addLab(PM.mEye, `지금 눈높이 ${r1(PM.mEye)}`, C.chalk2);
+  }
+  if (P.eye != null){
+    p.push(`<line x1="${X(-24)}" y1="${Y(P.eye)}" x2="${X(dist != null ? dist : 60)}" y2="${Y(P.eye)}" stroke="${C.chalk}" stroke-width="${sw(1)}" stroke-dasharray="6 4"/>`);
+    addLab(P.eye, `목표 눈높이 ${r1(P.eye)}`, C.chalk, 600);
+  }
+
+  /* ── 모니터 · 시선 ── */
+  if (dist != null && PM.mTop != null && PM.mMonH != null){
+    p.push(`<rect x="${X(dist)-sw(4)}" y="${Y(PM.mTop)}" width="${sw(8)}" height="${PM.mMonH*k}" fill="${C.chalk3}"/>`);
+    if (PM.mDesk != null)
+      p.push(`<line x1="${X(dist)}" y1="${Y(PM.mTop-PM.mMonH)}" x2="${X(dist)}" y2="${Y(PM.mDesk)}" stroke="${C.chalk3}" stroke-width="${sw(1)}"/>`);
+    addLab(PM.mTop, `화면 상단 ${r1(PM.mTop)}`, C.chalk3);
+    /* 각도는 그리지 않는다 — 눈에서 화면으로 잇는 선 하나만 그어도 그게 시선각이 되고,
+       15~20° 가 ISO 9241-5 와 충돌해 뺀 바로 그 주장이 그림으로 되살아난다.
+       판정은 「화면 상단이 눈높이 아래인가」 하나뿐이라 세로 눈금으로만 표시한다 */
+    if (P.topMax != null){
+      const ok = PM.mTop <= P.topMax + 0.05;
+      p.push(`<line x1="${X(dist)-sw(9)}" y1="${Y(PM.mTop)}" x2="${X(dist)+sw(9)}" y2="${Y(PM.mTop)}" stroke="${ok?C.ok:C.bad}" stroke-width="${sw(2.4)}"/>`);
+      if (!ok)
+        p.push(`<line x1="${X(dist)}" y1="${Y(PM.mTop)}" x2="${X(dist)}" y2="${Y(P.topMax)}" stroke="${C.bad}" stroke-width="${sw(2.4)}"/>`);
+    }
+  } else if (dist == null){
+    p.push(T(R - fs(4), TOPY + fs(10), "모니터 — 눈↔화면 거리를 재야 그려집니다", C.chalk3, 9.5, "end"));
+  }
+
+  /* 높이 라벨을 겹치지 않게 벌린다 */
+  lab.sort((a,b) => a.y - b.y);
+  const gap = fs(13);
+  for (let i = 1; i < lab.length; i++)
+    if (lab[i].y - lab[i-1].y < gap) lab[i].y = lab[i-1].y + gap;
+  const shift = Math.max(0, lab.length ? lab[lab.length-1].y - (VH - fs(6)) : 0);
+  for (const l of lab)
+    p.push(TP(VW - fs(6), l.y - shift + fs(3.4), l.t, l.col, fs(10), "end", l.weight));
+
+  paint("#side");
+  sideVerdict(P);
+}
+
+/* 도면 아래 판정 — 차이를 cm 로 적는다. 3단계와 달리 여기서는 cm 가 본체다 */
+function sideVerdict(P){
+  const out = [];
+  /* 차이를 cm 로 적되 「틀렸다」로 칠하지 않는다 — 최적점이 ±2cm 움직인다는 걸
+     페이지가 이미 밝혔다. 빨강은 출처가 한목소리로 금지하는 것에만 쓴다 */
+  const cmp = (now, goal, what, how) => {
+    if (now == null || goal == null) return;
+    const d = goal - now;
+    if (Math.abs(d) <= 0.5){ out.push(["ok", `<b>${what}</b> — 목표와 같습니다.`]); return; }
+    out.push(["mid", `<b>${what}</b> — 목표보다 ${r1(Math.abs(d))}cm ${d > 0 ? "낮습니다" : "높습니다"}.
+      ${r1(Math.abs(d))}cm ${d > 0 ? "올리면" : "내리면"} 목표입니다. ${how||""}`]);
+  };
+  if (!PM.fix) cmp(PM.mDesk, P.desk, "책상", "책상을 못 바꾸면 위 「책상 높이 조절」을 고정으로 두세요.");
+  cmp(PM.mSeat, P.seat, "좌면");
+  if (PM.mTop != null && P.topMax != null)
+    out.push(PM.mTop <= P.topMax + 0.05
+      ? ["ok", `<b>화면 상단</b> — 눈높이 이하입니다.`]
+      : ["bad", `<b>화면 상단</b>이 눈높이보다 <b>${r1(PM.mTop - P.topMax)}cm</b> 높습니다. 모니터를 내리세요.`]);
+  if (P.foot != null && P.foot > 0.5)
+    out.push(["mid", `책상이 고정이라 좌면을 올려야 합니다. <b>발판 ${r1(P.foot)}cm</b>로
+      발을 받쳐 하체 90°를 되찾으세요. 넓고 단단한 것이 좋습니다.`]);
+  $("#sideOut").innerHTML = out.length
+    ? out.map(([c,t]) => `<div class="note wn-${c}">${t}</div>`).join("")
+    : `<div class="note"><b>아직 비교할 값이 없습니다.</b> 위에서 잰 값을 넣으면 여기에 차이가 cm로 나옵니다.</div>`;
+}
+
+function renderPosture(){ const P = readPosture(); postureWarn(P); postureTable(P); drawSide(); }
+
 (function init(){
+  /* 두 페이지가 같은 파일을 쓴다. #calib 이 있으면 자세 페이지다 */
+  if ($("#calib")){
+    $$("#measure input, #measure select").forEach(el => el.addEventListener("input", renderPosture));
+    $("#mFix").addEventListener("change", renderPosture);
+    let pt;
+    window.addEventListener("resize", () => {
+      clearTimeout(pt);
+      pt = setTimeout(() => { const m = isMob(); if (m !== MOB){ MOB = m; drawSide(); } }, 160);
+    });
+    renderPosture();
+    return;
+  }
+
   const opts = Object.keys(GAMES).map(g => `<option value="${g}">${GAMES[g].n}</option>`).join("");
   $("#game").innerHTML = opts;   $("#game").value = "valorant";
   $("#toGame").innerHTML = opts; $("#toGame").value = "cs2";

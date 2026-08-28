@@ -226,40 +226,60 @@ const eq = (label, got, want) => {
   eq("뺀 기능 6줄 유지", lo.rows, 6);
   eq("기능 칸 이름 — 자세 점수", lo.keys.includes("자세 점수 · 집계식"), true);
   eq("기능 칸 이름 — 키보드 각도", lo.keys.includes("키보드 각도 — 크기"), true);
-  eq("기능 칸 이름 — 높이", lo.keys.includes("높이 — cm 단위 지시"), true);
+  /* 2026-08-29 — 「높이 — cm 단위 지시」는 해결됐다. 뺐던 이유가 「인구 비율로 추정해서」였는데
+     직접 잰 값만 받는 쪽으로 대체됐기 때문이다. 지우지 않고 해결 기록으로 남긴다 */
+  eq("기능 칸 이름 — 추정 계산기(해결됨)", lo.keys.includes("키에서 몸 치수를 추정하는 계산기"), true);
+  eq("해결 기록이 남아 있음", await p.$eval("#left-out", e =>
+    /돌아올 일 없음/.test(e.textContent) && /대신 무엇을 했나/.test(e.textContent)), true);
   eq("자세 페이지 링크", lo.link, true);
 
-  console.log("14 자세 페이지 (posture.html)");
+  console.log("14 자세 페이지 — 점수를 내지 않는다");
   await p.goto(url("posture.html")); await p.evaluate(() => document.fonts.ready);
+  /* 2026-08-29 규칙 변경. 예전에는 「script 0개 · 입력 0개」로 지켰지만
+     캘리브레이션 앱이 되면서 둘 다 필요해졌다. 보장을 수단이 아니라 결과로 옮긴다 —
+     계산은 하되 점수는 안 낸다. 아래가 그 새 불변식이다 (CLAUDE.md 9번) */
   const po = await p.evaluate(() => {
-    const li = [...document.querySelectorAll(".chk > li")];
+    const li  = [...document.querySelectorAll(".chk:not(.cal) > li")];
+    const cal = [...document.querySelectorAll(".chk.cal > li")];
     const probe = document.createElement("span");
     probe.style.color = "var(--chalk)"; document.body.appendChild(probe);
     const chalk = getComputedStyle(probe).color; probe.remove();
-    return { n: li.length,
+    return { n: li.length, cal: cal.length,
              tagged: li.filter(l => l.querySelector(".ct .tag")).length,
+             calProc: cal.filter(l => l.querySelector(".ct .tag.t-proc")).length,
              body: document.body.textContent.replace(/\s+/g, " "),
              /* 지시문(제목 + 본문)과 각주(.premise)를 나눠 본다. 각주에서 「이 숫자는 안 씁니다」라고
                 밝히는 것과, 지시문에서 그 숫자를 시키는 것은 정반대다 */
              instr: li.map(l => [...l.querySelectorAll("p:not(.premise)")]
                       .map(e => e.textContent).join(" ")).join(" ").replace(/\s+/g, " "),
-             script: document.querySelectorAll("script").length,
-             /* 점수를 낼 수 있는 입력 장치가 하나도 없어야 한다 */
-             widgets: document.querySelectorAll("input,progress,meter,output,select").length,
+             /* 3단계 「지시문」이 cm 를 안 쓴다 — 항목 안(.chk.cal)만 본다.
+                섹션 도입부의 「2cm 올리세요가 아니라」는 규칙을 설명하는 문장이라 다르다.
+                범위를 안 정하면 그 말을 하는 문장까지 잡힌다 (CLAUDE.md 「금지어 검사」) */
+             calTxt: [...document.querySelectorAll(".chk.cal > li")]
+               .map(e => e.textContent).join(" ").replace(/\s+/g, " "),
+             /* 눌러서 채우는 것 — 있으면 「몇 개 채웠나」가 생기고 그게 점수다 */
+             ticks: document.querySelectorAll("input[type=checkbox],input[type=radio],progress,meter").length,
+             procColor: (() => { const t = document.querySelector(".tag.t-proc");
+               return t ? getComputedStyle(t).color : "(없음)"; })(),
              back: !!document.querySelector('a.brand[href="index.html"]'),
              /* 링크 색이 분필색이어야 한다 — 파란 기본 링크면 근거등급 신호가 깨진다 */
              linkOK: [...document.querySelectorAll("section a")]
-               .every(a => getComputedStyle(a).color === chalk) };
+               .every(a => getComputedStyle(a).color === chalk),
+             chalk };
   });
   eq("체크리스트 5줄", po.n, 5);
   eq("5줄 전부 근거 태그", po.tagged, 5);
-  eq("점수용 입력 요소 0개", po.widgets, 0);
+  eq("캘리브레이션 3종", po.cal, 3);
+  eq("캘리브레이션은 전부 [절차] 태그", po.calProc, 3);
+  /* [절차]는 근거 등급이 아니다. 3색(ok/mid/bad)을 쓰면 「초록이면 믿어도 된다」가 무너진다 */
+  eq("[절차] 태그는 무채색(--chalk)", po.procColor, po.chalk);
+  eq("체크 상자·진행률 0개", po.ticks, 0);
   eq("「점수를 내지 않습니다」 선언", /점수를 내지 않습니다/.test(po.body), true);
   /* 「총점」이라는 낱말 자체는 「총점을 안 냅니다」라고 밝히려면 필요하다.
      막아야 하는 건 낱말이 아니라 실제로 매겨진 숫자다 */
   eq("매겨진 점수 없음", /\d+\s*점(?!수)|\/\s*100\b/.test(po.body), false);
-  /* 스크립트가 없으면 점수를 계산할 방법 자체가 없다 — 가장 센 보장이다 */
-  eq("스크립트 0개 (계산 수단 없음)", po.script, 0);
+  eq("「몇 개 통과」 카운터 없음", /\d+\s*\/\s*\d+\s*(통과|완료|항목)/.test(po.body), false);
+  eq("3단계 지시문에 cm 수치 없음", /\d+\s*cm/.test(po.calTxt), false);
   eq("헤더에 index 로 돌아가는 링크", po.back, true);
   eq("링크에 색 안 씀 (분필색)", po.linkOK, true);
   /* 2026-08-28 확정. research/04 의 「반시계 · 오른쪽 끝을 앞으로」는 폐기됐다.
@@ -277,11 +297,88 @@ const eq = (label, got, want) => {
   const fs2 = require("fs");
   const grab = (f, re) => (fs2.readFileSync(path.join(__dirname, "..", f), "utf8").match(re) || [""])[0];
   for (const [what, re] of [["마크 SVG", /<svg class="mk"[\s\S]*?<\/svg>/],
-                            ["범례",     /<div class="legend">[\s\S]*?<\/div>\s*<\/div>/],
                             ["파비콘",   /<link rel="icon"[^>]*>/]]) {
     const a = grab("index.html", re), b = grab("posture.html", re);
     eq(`${what} 두 페이지 동일`, a && a === b ? "같음" : "갈림", "같음");
   }
+  /* 범례는 이제 완전히 같지 않다 — 자세 페이지에만 [절차]가 한 줄 더 붙는다.
+     그래서 「앞 셋은 같고 뒤에 절차 하나만 더」를 본다. 통째로 같은지 보면
+     의도한 차이 때문에 매번 실패하고, 안 보면 진짜 갈림을 놓친다 */
+  const leg = f => (grab(f, /<div class="legend">[\s\S]*?<\/div>\s*<\/div>/)
+    .match(/<span>.*?<\/span>/g) || []).map(s => s.replace(/\s+/g, ""));
+  const li = leg("index.html"), lp = leg("posture.html");
+  eq("범례 앞 셋 동일", JSON.stringify(li) === JSON.stringify(lp.slice(0,3)) ? "같음" : "갈림", "같음");
+  eq("자세 페이지에만 [절차] 한 줄 더", `${li.length}→${lp.length}`, "3→4");
+  eq("index 에는 [절차] 없음", grab("index.html", /lg-proc/) || "없음", "없음");
+
+  console.log("16 측면도 (#side)");
+  await p.goto(url("posture.html")); await p.evaluate(() => document.fonts.ready);
+  const empty = await p.$eval("#side", e => e.textContent);
+  eq("빈 상태 — 재야 나옵니다", /재야 나옵니다/.test(empty), true);
+  eq("빈 상태 — 목표표도 비어 있음", await p.$$eval("#targetBody .mno", n => n.length > 0), true);
+  const fill = async o => { for (const [k,v] of Object.entries(o)) await p.fill("#"+k, v);
+                            await p.waitForTimeout(120); };
+  await fill({ mPop:"45", mElb:"24", mEye:"120", mSeat:"46", mDesk:"74", mTop:"112", mMonH:"30", mDist:"60" });
+  const sd = await p.evaluate(() => ({
+    rows: [...document.querySelectorAll("#targetBody tr")].map(r =>
+      [r.children[0].textContent.trim(), r.children[2].textContent.trim(),
+       r.querySelector(".tag").textContent.trim()]),
+    txt: document.querySelector("#side").textContent,
+    out: document.querySelector("#sideOut").textContent.replace(/\s+/g," "),
+  }));
+  eq("목표 4줄", sd.rows.length, 4);
+  eq("목표 전부 [검증]", sd.rows.every(r => r[2] === "검증"), true);
+  eq("좌면 = 오금 + 1", sd.rows[0][1], "46.0cm");
+  eq("책상 = 좌면 + 팔꿈치 + 1", sd.rows[1][1], "71.0cm");
+  eq("눈높이 = 목표좌면 + (앉은눈높이 − 지금좌면)", sd.rows[2][1], "120.0cm");
+  eq("화면 상단 ≤ 눈높이", sd.rows[3][1], "≤ 120.0cm");
+  eq("도면에 지금·목표 둘 다", /지금 책상/.test(sd.txt) && /목표 책상/.test(sd.txt), true);
+  eq("차이를 cm 로 표시", /3\.0cm/.test(sd.out), true);
+  /* 2026-08-29 철회분. 15~20° 는 ISO 9241-5 와 충돌해 [추론] 이라 통째로 뺐다.
+     막는 건 「값과 그 정당화」다. 어디에서 막는지까지 정한다 —
+       · 값(15~20°)과 ISO 인용은 페이지 어디에도 없어야 한다
+       · 「시선 하방각」이라는 말은 2단계(#plan)에 없어야 한다.
+         닫는 글에서 「이건 안 냅니다」라고 밝히는 것은 정반대라 허용한다 */
+  eq("시선각 값·ISO 인용 없음", await p.evaluate(() =>
+    /15\s*~\s*20\s*°|ISO 9241/.test(document.body.textContent)), false);
+  eq("2단계에 시선각 목표 없음", await p.evaluate(() =>
+    /하방각|시선각/.test(document.querySelector("#plan").textContent)), false);
+  eq("페이지에 [추론] 태그 0개", await p.$$eval(".tag.t-mid", n => n.length), 0);
+  /* 책상 고정이면 좌면을 역산하고 발판 높이가 나온다 */
+  await p.selectOption("#mFix", "fix"); await p.waitForTimeout(120);
+  const fx = await p.$$eval("#targetBody tr", rs => rs.map(r =>
+    [r.children[0].textContent.trim(), r.children[2].textContent.trim()]));
+  eq("책상 고정 — 발판 행 등장", fx.length, 5);
+  eq("역산 좌면 = 책상 − 팔꿈치 − 1", fx[0][1], "49.0cm");
+  eq("발판 = 좌면 − (오금 + 1)", fx[4][1], "3.0cm");
+  /* 모순 검사 (research/07) */
+  await p.selectOption("#mFix", "adj");
+  await fill({ mSeat:"52" });
+  eq("모순 검사 — 발이 떠야 함", await p.$eval("#mWarn", e => /발이 떠야/.test(e.textContent)), true);
+
+  console.log("17 추정 금지 — 되살리기 방지");
+  /* research/06 의 R={pop:.2310, elb:.1504, eye:.4590} 이 「키에서 몸 치수를 추정」하던 코드고,
+     자세 기능이 통째로 빠진 이유였다. 「빈칸이 불편하다」며 되살릴 위험이 커서 여기서 막는다 */
+  await p.goto(url("posture.html")); await p.evaluate(() => document.fonts.ready);
+  eq("키 입력칸 없음", await p.evaluate(() =>
+    [...document.querySelectorAll("label")].some(l => /^키\b|신장/.test(l.textContent.trim()))), false);
+  /* 주석은 빼고 본다. 「이 비율을 되살리지 마라」는 경고문 자체가 그 숫자를 담고 있어서,
+     문자열만 찾으면 경고문이 검사에 걸린다 — 막을 것은 실제로 도는 코드다 */
+  const appSrc = fs2.readFileSync(path.join(__dirname, "..", "app.js"), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:])\/\/.*$/gm, "$1");
+  eq("app.js 코드에 추정 비율 없음",
+     ["0.2310",".2310","0.1504",".1504","0.4590",".4590"].filter(v => appSrc.includes(v)).join(" ") || "없음",
+     "없음");
+  eq("경고 주석은 남아 있음", /되살리지|R=\{pop/.test(
+     fs2.readFileSync(path.join(__dirname, "..", "app.js"), "utf8")), true);
+  eq("안 잰 값은 채우지 않는다", await p.evaluate(async () => {
+    const e = document.querySelector("#mPop"); e.value = "45"; e.dispatchEvent(new Event("input"));
+    await new Promise(r => setTimeout(r, 120));
+    const rows = [...document.querySelectorAll("#targetBody tr")];
+    /* 오금높이만 넣었으니 좌면은 나오고 눈높이는 「재야 나옵니다」여야 한다 */
+    return rows[0].children[2].textContent.trim() === "46.0cm"
+        && /재야 나옵니다/.test(rows[2].children[2].textContent);
+  }), true);
 
   eq("페이지 예외 0", errs.length, 0);
   await b.close();
