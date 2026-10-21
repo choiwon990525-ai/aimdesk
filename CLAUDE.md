@@ -11,6 +11,7 @@ app.js        계산 · 렌더 · SVG 생성 — 두 페이지 공용. #calib �
 
 tools/        검사 전용 (배포 제외) — audit.js · values.js
 research/     원본 근거 자료 (읽기 전용)
+reels/        인스타 릴스 분석 (Apify · Gemini) — 사이트와 무관, 배포 제외. reels/README.md
 ```
 
 ### ⚠ 사본이 둘입니다
